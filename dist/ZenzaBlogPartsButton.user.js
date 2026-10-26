@@ -7,7 +7,7 @@
 // @author         segabito macmoto
 // @license        public domain
 // @version        0.0.3
-// @downloadURL    https://github.com/kphrx/ZenzaWatch/raw/playlist-deploy/dist/ZenzaBlogPartsButton.user.js
+// @downloadURL    https://github.com/onoderakeita/ZenzaWatch/raw/playlist-deploy/dist/ZenzaBlogPartsButton.user.js
 // ==/UserScript==
 /* eslint-disable */
 

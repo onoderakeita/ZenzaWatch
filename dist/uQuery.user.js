@@ -9,7 +9,7 @@
 // @run-at         document-start
 // @license        public domain
 // @noframes
-// @downloadURL    https://github.com/kphrx/ZenzaWatch/raw/playlist-deploy/dist/uQuery.user.js
+// @downloadURL    https://github.com/onoderakeita/ZenzaWatch/raw/playlist-deploy/dist/uQuery.user.js
 // ==/UserScript==
 /* eslint-disable */
 const AntiPrototypeJs = function() {

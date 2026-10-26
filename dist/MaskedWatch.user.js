@@ -14,7 +14,7 @@
 // @grant       none
 // @author      名無しさん
 // @license     public domain
-// @downloadURL    https://github.com/kphrx/ZenzaWatch/raw/playlist-deploy/dist/MaskedWatch.user.js
+// @downloadURL    https://github.com/onoderakeita/ZenzaWatch/raw/playlist-deploy/dist/MaskedWatch.user.js
 // ==/UserScript==
 /* eslint-disable */
 

@@ -47,6 +47,11 @@ const DEV_HEADER = {
 
 let REQMAP = {};
 
+// 配布元の既定値。fork から配布する場合はここを変えるか、
+// --download-base=<url> / ZW_DOWNLOAD_BASE で上書きする。
+const DEFAULT_DOWNLOAD_BASE =
+  'https://github.com/onoderakeita/ZenzaWatch/raw/playlist-deploy';
+
 const throttle = (func, interval) => {
   let lastTime = 0;
   let lastArgs = null;
@@ -273,9 +278,14 @@ function loadTemplateFile(srcDir, indexFile, outFile, params) {
       }
     }
     if (line.match(/\/\/ *==\/UserScript==/)) {
-      lines.push(`// @downloadURL    https://github.com/kphrx/ZenzaWatch/raw/playlist-deploy/${outFile}`);
+      const cliDownloadBase =
+        typeof params.downloadBase === 'string' ? params.downloadBase : '';
+      const downloadBase = (cliDownloadBase ||
+        process.env.ZW_DOWNLOAD_BASE ||
+        DEFAULT_DOWNLOAD_BASE).replace(/\/+$/, '');
+      lines.push(`// @downloadURL    ${downloadBase}/${outFile}`);
       // meta.js でUserScriptブロックのみを含んだファイルを用意すると嬉しいやつ。そうでなければdownloadURLだけ持っていれば良い
-      // lines.push(`// @updateURL      https://github.com/kphrx/ZenzaWatch/raw/playlist-deploy/${outFile}`);
+      // lines.push(`// @updateURL      ${downloadBase}/${outFile}`);
       lines.push(line);
       lines.push('/* eslint-disable */');
       return;
@@ -352,13 +362,23 @@ function watch(srcDir, params) {
 
 function run() {
   let params = {};
-  process.argv.concat().splice(-2).forEach(v => {
-    if (/^--(.+)$/.test(v)) {
-      params[RegExp.$1] = 1;
-    } else if (/^([a-z0-9]+)=(.*)$/.test(v)) {
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const v = argv[i];
+    const m = v.match(/^--([\w-]+)(?:=(.*))?$/);
+    if (m) {
+      const key = m[1].replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+      let value = m[2];
+      if (value === undefined && argv[i + 1] && !argv[i + 1].startsWith('-')) {
+        value = argv[++i];
+      }
+      params[key] = value === undefined ? 1 : value;
+      continue;
+    }
+    if (/^([a-z0-9]+)=(.*)$/.test(v)) {
       params[RegExp.$1] = RegExp.$2;
     }
-  });
+  }
 
   console.log(params);
   build(params);

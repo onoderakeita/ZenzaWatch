@@ -35,7 +35,7 @@
 // @version        2.6.3-fix-playlist.57
 // @run-at         document-body
 // @require        https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.11/lodash.min.js
-// @downloadURL    https://github.com/kphrx/ZenzaWatch/raw/playlist-deploy/dist/ZenzaWatch-dev.user.js
+// @downloadURL    https://github.com/onoderakeita/ZenzaWatch/raw/playlist-deploy/dist/ZenzaWatch-dev.user.js
 // ==/UserScript==
 /* eslint-disable */
 // import {SettingPanel} from './SettingPanel';

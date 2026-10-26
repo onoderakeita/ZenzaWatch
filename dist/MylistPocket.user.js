@@ -31,7 +31,7 @@
 // @author      segabito macmoto
 // @license     public domain
 // @require     https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.5/lodash.min.js
-// @downloadURL    https://github.com/kphrx/ZenzaWatch/raw/playlist-deploy/dist/MylistPocket.user.js
+// @downloadURL    https://github.com/onoderakeita/ZenzaWatch/raw/playlist-deploy/dist/MylistPocket.user.js
 // ==/UserScript==
 /* eslint-disable */
 

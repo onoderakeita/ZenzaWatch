@@ -8,7 +8,7 @@
 // @version     0.0.11
 // @grant       none
 // @license     public domain
-// @downloadURL    https://github.com/kphrx/ZenzaWatch/raw/playlist-deploy/dist/CapTube.user.js
+// @downloadURL    https://github.com/onoderakeita/ZenzaWatch/raw/playlist-deploy/dist/CapTube.user.js
 // ==/UserScript==
 /* eslint-disable */
 
@@ -110,7 +110,7 @@ const workerUtil = (() => {
 							if (status === 'ok') {
 								promises[sessionId].resolve(params.result);
 							} else {
-								promises[sessionId].reject(params.result);
+								promises[sessionId].reject(new Error(params.result));
 							}
 							delete promises[sessionId];
 						}
@@ -271,6 +271,7 @@ const workerUtil = (() => {
 			function (self) {
 			let config = {}, PRODUCT, TOKEN, CONSTANT, NAME = decodeURI('${encodeURI(name)}'), bcast = {}, portMap = {};
 			const {Handler, PromiseHandler, Emitter} = (${EmitterInitFunc.toString()})();
+			${options.inject ?? ''}
 			(${func.toString()})(self);
 			//===================================
 			(${messageWrapper.toString()})(self);
@@ -291,7 +292,7 @@ const workerUtil = (() => {
 								if (status === 'ok') {
 									promises[sessionId].resolve(params.result);
 								} else {
-									promises[sessionId].reject(params.result);
+									promises[sessionId].reject(new Error(params.result));
 								}
 								delete promises[sessionId];
 							}

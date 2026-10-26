@@ -20,7 +20,7 @@
 // @author      segabito macmoto
 // @license     public domain
 // @noframes
-// @downloadURL    https://github.com/kphrx/ZenzaWatch/raw/playlist-deploy/dist/HeatSync.user.js
+// @downloadURL    https://github.com/onoderakeita/ZenzaWatch/raw/playlist-deploy/dist/HeatSync.user.js
 // ==/UserScript==
 /* eslint-disable */
 

@@ -18,7 +18,7 @@
 // @match          *://*.nicovideo.jp/smile*
 // @match          *://site.nicovideo.jp/*
 // @match          *://anime.nicovideo.jp/*
-// @match          https://www.upload.nicovideo.jp/garage/*
+// @match          https://www.upload.nicovideo.jp/niconico-garage/video/*
 // @match          https://www.google.co.jp/search*
 // @match          https://www.google.com/search*
 // @match          https://*.bing.com/search*
@@ -32,9 +32,10 @@
 // @exclude        *://ext.nicovideo.jp/thumb_channel/*
 // @grant          none
 // @author         segabito
-// @version        2.6.2
+// @version        2.6.3-fix-playlist.57
 // @run-at         document-body
 // @require        https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.11/lodash.min.js
+// @downloadURL    https://github.com/onoderakeita/ZenzaWatch/raw/playlist-deploy/dist/ZenzaWatch.user.js
 // ==/UserScript==
 /* eslint-disable */
 // import {SettingPanel} from './SettingPanel';
@@ -98,9 +99,9 @@ AntiPrototypeJs();
     const dll = {};
     const util = {};
     let {dimport, workerUtil, IndexedDbStorage, Handler, PromiseHandler, Emitter, parseThumbInfo, WatchInfoCacheDb, StoryboardCacheDb, VideoSessionWorker} = window.ZenzaLib;
-    START_PAGE_QUERY = encodeURIComponent(START_PAGE_QUERY);
+    START_PAGE_QUERY = decodeURIComponent(START_PAGE_QUERY);
 
-    var VER = '2.6.2';
+    var VER = '2.6.3-fix-playlist.57';
     const ENV = 'STABLE';
 
 
@@ -772,6 +773,7 @@ const Config = (() => {
 		autoPlay: true,
 		'autoPlay:ginza': true,
 		'autoPlay:others': true,
+		enableResume: false,
 		loop: false,
 		mute: false,
 		screenMode: 'normal',
@@ -805,6 +807,18 @@ const Config = (() => {
 		'filter.fork0': true, // 通常コメント
 		'filter.fork1': true, // 投稿者コメント
 		'filter.fork2': true, // かんたんコメント
+		'filter.fork3': true, // AIキャラクターコメント
+		'filter.defaultThread': true, // 通常コメント
+		'filter.ownerThread': true, // 投稿者コメント
+		'filter.communityThread': true, // チャンネルコメント / コミュニティコメント
+		'filter.nicosThread': true, // ニコスクリプトコメント
+		'filter.easyThread': true, // かんたんコメント
+		'filter.aiThread': true, // AIキャラクターコメント
+		'filter.extraDefaultThread': true, // ***extra-default
+		'filter.extraOwnerThread': true, // ***extra-owner
+		'filter.extraCommunityThread': true, // 引用コメント
+		'filter.extraNicosThread': true, // ***extra-nicos
+		'filter.extraEasyThread': true, // 引用かんたんコメント
 		videoTagFilter: '',
 		videoOwnerFilter: '',
 		enableCommentPanel: true,
@@ -812,7 +826,7 @@ const Config = (() => {
 		commentSpeedRate: 1.0,
 		autoCommentSpeedRate: false,
 		playlistLoop: false,
-		commentLanguage: 'ja_JP',
+		commentLanguage: 'ja-jp',
 		baseFontFamily: '',
 		baseChatScale: 1.0,
 		baseFontBolder: true,
@@ -829,6 +843,7 @@ const Config = (() => {
 		'commentLayer.enableSlotLayoutEmulation': false,
 		'commentLayer.ownerCommentShadowColor': '#008800', // 投稿者コメントの影の色
 		'commentLayer.easyCommentOpacity': 0.5, // かんたんコメントの透明度
+		'commentLayer.aiCommentOpacity': 0.5, // かんたんコメントの透明度
 		overrideGinza: false,     // 動画視聴ページでもGinzaの代わりに起動する
 		enableGinzaSlayer: false, // まだ実験中
 		lastPlayerId: '',
@@ -837,10 +852,9 @@ const Config = (() => {
 		message: '',
 		enableVideoSession: true,
 		videoServerType: 'dmc',
-		autoDisableDmc: true, // smileのほうが高画質と思われる動画でdmcを無効にする
+		autoDisableNew: true, // dmcのほうが高画質と思われる動画でdomandを無効にする
 		dmcVideoQuality: 'auto',   // 優先する画質 auto, veryhigh, high, mid, low
-		smileVideoQuality: 'default', // default eco
-		useWellKnownPort: false, // この機能なくなったぽい (常時true相当になった)
+		domandVideoQuality: 'auto', // 優先する画質 auto, 1080p, 720, 480p, 360p, 144p
 		'video.hls.enable': true,
 		'video.hls.segmentDuration': 6000,
 		'video.hls.enableOnlyRequired': true, // hlsが必須の動画だけ有効化する
@@ -930,9 +944,7 @@ Config.exportToFile = () => {
 		rel: 'noopener',
 		href: url
 	});
-	(document.body || document.documentElemennt).append(a);
 	a.click();
-	setTimeout(() => a.remove(), 1000);
 };
 const NaviConfig = Config;
 await Config.promise('restore');
@@ -1606,10 +1618,10 @@ const uq = uQuery;
       state: {},
       dll
     };
-    Promise.all([//https://unpkg.com/lit-html@1.1.2/lit-html.js?module
-      dimport('https://unpkg.com/lit-html@1.1.2/lit-html.js?module'),
-      dimport('https://unpkg.com/lit-html@1.1.2/directives/repeat?module'),
-      dimport('https://unpkg.com/lit-html@1.1.2/directives/class-map?module')
+    Promise.all([//https://esm.run/lit@2.0.2/html.js
+      dimport('https://esm.run/lit@2.0.2/html.js'),
+      dimport('https://esm.run/lit@2.0.2/directives/repeat'),
+      dimport('https://esm.run/lit@2.0.2/directives/class-map')
     ]).then(([lit, ...directives]) => {
       dll.lit = lit;
       dll.directives = Object.assign({}, ...directives);
@@ -1639,7 +1651,7 @@ const uq = uQuery;
 
     // const modules = ZenzaWatch.modules;
 const CONSTANT = {
-	BASE_Z_INDEX: 100000,
+	BASE_Z_INDEX: 6000002,
 	CONTROL_BAR_HEIGHT: 40,
 	SIDE_PLAYER_WIDTH: 400,
 	SIDE_PLAYER_HEIGHT: 225,
@@ -1731,7 +1743,7 @@ CONSTANT.COMMON_CSS = `
 		opacity: 0.99;
 		box-sizing: border-box;
 		transition: opacity 0.3s ease;
-		z-index: ${CONSTANT.BASE_Z_INDEX + 50000};
+		z-index: 50000;
 		user-select: none;
 	}
 	.zenzaPopupMenu:not(.show) {
@@ -1743,7 +1755,7 @@ CONSTANT.COMMON_CSS = `
 	.zenzaPopupMenu ul {
 		padding: 0;
 	}
-	.zenzaPopupMenu ul li {
+	.zenzaPopupMenu ul > li {
 		position: relative;
 		margin: 2px 4px;
 		white-space: nowrap;
@@ -1752,27 +1764,27 @@ CONSTANT.COMMON_CSS = `
 		list-style-type: none;
 		float: inherit;
 	}
-	.zenzaPopupMenu ul li + li {
+	.zenzaPopupMenu ul > li + li {
 		border-top: 1px dotted var(--item-border-color);
 	}
-	.zenzaPopupMenu li.selected {
+	.zenzaPopupMenu ul > li.selected {
 		font-weight: bolder;
 	}
-	.zenzaPopupMenu ul li:hover {
+	.zenzaPopupMenu ul > li:hover {
 		background: #663;
 	}
-	.zenzaPopupMenu ul li.separator {
+	.zenzaPopupMenu ul > li.separator {
 		border: 1px outset;
 		height: 2px;
 		width: 90%;
 	}
-	.zenzaPopupMenu li span {
+	.zenzaPopupMenu li > span {
 		box-sizing: border-box;
 		margin-left: 8px;
 		display: inline-block;
 		cursor: pointer;
 	}
-	.zenzaPopupMenu ul li.selected span:before {
+	.zenzaPopupMenu ul > li.selected > span:before {
 		content: '✔';
 		left: 0;
 		position: absolute;
@@ -1852,87 +1864,11 @@ const global = {
   NICORU,
   dll
 };
-class ClassListWrapper {
-	constructor(element) {
-		this.applyNow = this.apply.bind(this);
-		this.apply = throttle.raf(this.applyNow);
-		if (element) {
-			this.setElement(element);
-		} else {
-			this._next = new Set;
-			this._last = new Set;
-		}
-	}
-	setElement(element) {
-		if (this._element) {
-			this.applyNow();
-		}
-		this._element = element;
-		this._next = new Set(element.classList);
-		this._last = new Set(this._next);
-		return this;
-	}
-	add(...names) {
-		names = names.map(name => name.trim().split(/\s+/)).flat();
-		let changed = false;
-		for (const name of names) {
-			if (!this._next.has(name)) {
-				changed = true;
-				this._next.add(name);
-			}
-		}
-		changed && this.apply();
-		return this;
-	}
-	remove(...names) {
-		names = names.map(name => name.trim().split(/\s+/)).flat();
-		let changed = false;
-		for (const name of names) {
-			if (this._next.has(name)) {
-				changed = true;
-				this._next.delete(name);
-			}
-		}
-		changed && this.apply();
-		return this;
-	}
-	contains(name) {
-		return this._next.has(name);
-	}
-	toggle(name, v) {
-		if (v !== undefined) {
-			v = !!v;
-		} else {
-			v = !this.contains(name);
-		}
-		const names = name.trim().split(/\s+/);
-		v ? this.add(...names) : this.remove(...names);
-		return this;
-	}
-	apply() {
-		const last = [...this._last].sort().join(',');
-		const next = [...this._next].sort().join(',');
-		if (next === last) { return; }
-		const element = this._element;
-		const added = [], removed = [];
-		for (const name of this._next) {
-			if (!this._last.has(name)) { added.push(name); }
-		}
-		for (const name of this._last) {
-			if (!this._next.has(name)) { removed.push(name); }
-		}
-		if (removed.length) { element.classList.remove(...removed); }
-		if (added.length)   { element.classList.add(...added); }
-		this._last = this._next;
-		this._next = new Set(element.classList);
-		return this;
-	}
-}
 const ClassList = function(element) {
 	if (this.map.has(element)) {
 		return this.map.get(element);
 	}
-	const m = new ClassListWrapper(element);
+	const m = element.classList;
 	this.map.set(element, m);
 	return m;
 }.bind({map: new WeakMap()});
@@ -1996,7 +1932,7 @@ const PopupMessage = (() => {
 			--notify-color: #0c0;
 			--alert-color: #c00;
 			--shadow-color: #ccc;
-			z-index: ${CONSTANT.BASE_Z_INDEX + 100000};
+			z-index: 100000;
 			opacity: 0;
 			display: block;
 			min-width: 150px;
@@ -2121,15 +2057,16 @@ const Fullscreen = {
 	_handleEvents() {
 		this._handleEvnets = _.noop;
 		const cl = ClassList(document.body);
-		const handle = () => {
+		const handle = (ev) => {
+			ev.stopImmediatePropagation();
 			const isFull = this.now();
 			cl.toggle('is-fullscreen', isFull);
 			global.emitter.emit('fullscreenStatusChange', isFull);
 		};
-		document.addEventListener('webkitfullscreenchange', handle, false);
-		document.addEventListener('mozfullscreenchange', handle, false);
-		document.addEventListener('MSFullscreenChange', handle, false);
-		document.addEventListener('fullscreenchange', handle, false);
+		document.addEventListener('webkitfullscreenchange', handle, true);
+		document.addEventListener('mozfullscreenchange', handle, true);
+		document.addEventListener('MSFullscreenChange', handle, true);
+		document.addEventListener('fullscreenchange', handle, true);
 	}
 };
 util.fullscreen = Fullscreen;
@@ -2363,67 +2300,28 @@ const nicoUtil = {
 	parseWatchQuery: query => {
 		try {
 			const result = textUtil.parseQuery(query);
-			const playlist = JSON.parse(textUtil.decodeBase64(result.playlist) || '{}');
+			const playlist = JSON.parse(result.playlist && textUtil.decodeBase64(result.playlist) || '{}');
 			const context = playlist.context;
-			if (playlist.type === 'search') {
-				if (context.hasOwnProperty('tag')) {
-					result.playlist_type = 'tag';
-					result.tag = context.tag;
-				} else {
-					result.playlist_type = 'search';
-					result.keyword = context.keyword;
+			result.playlist = { type: playlist.type };
+			switch (playlist.type) {
+				case 'series':
+					Object.assign(result.playlist, { id: context.seriesId });
+					break;
+				case 'user-uploaded': {
+					const { userId, ...options } = context;
+					Object.assign(result.playlist, { id: userId, options });
+					break;
 				}
-				result.order = context.sortOrder === 'asc' ? 'a' : 'd';
-				result.sort = ((sortKey) => {
-					switch (sortKey) {
-						case 'hotLikeAndMylist': return 'h';
-						case 'personalized': return 'p';
-						case 'registeredAt': return 'f';
-						case 'viewCount': return 'v';
-						case 'mylistCount': return 'm';
-						case 'lastCommentTime': return 'n';
-						case 'commentCount': return 'r';
-						case 'duration': return 'l';
-					}
-				})(context.sortKey);
-				const F_RANGE = {
-					U_1H: 4,
-					U_24H: 1,
-					U_1W: 2,
-					U_30D: 3
-				};
-				const L_RANGE = {
-					U_5MIN: 1,
-					O_20MIN: 2
-				};
-				if (context.minRegisteredAt) {
-					result.f_range = (time => {
-						const now = Date.now();
-						if (time > now - 1000 * 60 * 60 * 24 * 30) {
-							return F_RANGE.U_30D;
-						} else if (time > now - 1000 * 60 * 60 * 24 * 7) {
-							return F_RANGE.U_1W;
-						} else if (time > now - 1000 * 60 * 60 * 24) {
-							return F_RANGE.U_24H;
-						} else if (time > now - 1000 * 60 * 60) {
-							return F_RANGE.U_1H;
-						}
-					})(new Date(context.minRegisteredAt).getTime());
+				case 'mylist': {
+					const { mylistId, ...options } = context;
+					Object.assign(result.playlist, { id: mylistId, options });
+					break;
 				}
-				if (context.maxDuration || context.minDuration) {
-					result.l_range = context.maxDuration === 300 ? L_RANGE.U_5MIN : L_RANGE.O_20MIN;
-				}
-				return result;
+				case 'watchlater':
+				case 'search':
+					Object.assign(result.playlist, { options: context });
+					break;
 			}
-			if (playlist.type === 'mylist') {
-				result.playlist_type = 'mylist';
-				result.group_id = context.mylistId;
-			} else if (playlist.type === 'watchlater') {
-				result.playlist_type = 'deflist';
-				result.group_id = 'deflist';
-			}
-			result.order = context.sortOrder;
-			result.sort = context.sortKey;
 			return result;
 		} catch(e) {
 			return {};
@@ -2452,13 +2350,13 @@ const nicoUtil = {
 			`https://tn.smilevideo.jp/smile?i=${fileId}.${large}`;
 	},
 	getWatchId: url => {
-		let m;
 		if (url && url.indexOf('nico.ms') >= 0) {
-			m = /\/\/nico\.ms\/([a-z0-9]+)/.exec(url);
+			let m = /\/\/nico\.ms\/([a-z0-9]+)/.exec(url);
+			return m ? m[1] : null;
 		} else {
-			m = /\/?watch\/([a-z0-9]+)/.exec(url || location.pathname);
+			let m = /\/?(watch|shorts)\/([a-z0-9]+)/.exec(url || location.pathname);
+			return m ? m[2] : null;
 		}
-		return m ? m[1] : null;
 	},
 	getCommonHeader: () => {
 		try { // hoge?.fuga... はGreasyforkの文法チェックで弾かれるのでまだ使えない
@@ -2510,40 +2408,7 @@ isLoginLegacy: () => {
 			'';
 		window.open(url, '_blank', 'width=550, height=480, left=100, top50, personalbar=0, toolbar=0, scrollbars=1, sizable=1', 0);
 	},
-	isGinzaWatchUrl: url => /^https?:\/\/www\.nicovideo\.jp\/watch\//.test(url || location.href),
-	getPlayerVer: () => {
-		if (document.getElementById('js-initial-watch-data')) {
-			return 'html5';
-		}
-		if (document.getElementById('watchAPIDataContainer')) {
-			return 'flash';
-		}
-		return 'unknown';
-	},
-	isZenzaPlayableVideo: () => {
-		try {
-			if (nicoUtil.getPlayerVer() === 'html5') {
-				return true;
-			}
-			const watchApiData = JSON.parse(document.querySelector('#watchAPIDataContainer').textContent);
-			const flvInfo = textUtil.parseQuery(
-				decodeURIComponent(watchApiData.flashvars.flvInfo)
-			);
-			const dmcInfo = JSON.parse(
-				decodeURIComponent(watchApiData.flashvars.dmcInfo || '{}')
-			);
-			const videoUrl = flvInfo.url ? flvInfo.url : '';
-			const isDmc = dmcInfo && dmcInfo.time;
-			if (isDmc) {
-				return true;
-			}
-			const isSwf = /\/smile\?s=/.test(videoUrl);
-			const isRtmp = (videoUrl.indexOf('rtmp') === 0);
-			return (isSwf || isRtmp) ? false : true;
-		} catch (e) {
-			return false;
-		}
-	},
+	isGinzaWatchUrl: url => /^https?:\/\/www\.nicovideo\.jp\/(watch|shorts)\//.test(url || location.href),
 	getNicoHistory: window.decodeURIComponent(document.cookie.replace(/^.*(nicohistory[^;+]).*?/, '')),
 	getMypageVer: () => document.querySelector('#js-initial-userpage-data') ? 'spa' : 'legacy'
 };
@@ -2759,6 +2624,10 @@ const WatchPageHistory = (() => {
 		document.title = (isOpen ? '📺' : '') + title.replace(/^📺/, '');
 		bouncedRestore();
 	};
+	const updateOriginal = () => {
+		originalUrl = window && window.location && window.location.href;
+		originalTitle = window && window.document && window.document.title;
+	};
 	const onVideoInfoLoad = _.debounce(({watchId, title, owner: {name}}) => {
 		if (!watchId || !isOpen) {
 			return;
@@ -2772,7 +2641,10 @@ const WatchPageHistory = (() => {
 			return NicoVideoApi.pushHistory(path, title);
 		}
 	});
-	const onDialogOpen = () => isOpen = true;
+	const onDialogOpen = () => {
+		updateOriginal();
+		isOpen = true;
+	};
 	const onDialogClose = () => {
 		isOpen = false;
 		watchId = title = path = null;
@@ -2790,9 +2662,9 @@ const WatchPageHistory = (() => {
 		dialog.on('open', onDialogOpen);
 		dialog.on('loadVideoInfo', onVideoInfoLoad);
 		if (location.host !== 'www.nicovideo.jp') { return; }
-		window.addEventListener('beforeunload', restore, {passive: true});
-		window.addEventListener('error', restore, {passive: true});
-		window.addEventListener('unhandledrejection', restore, {passive: true});
+		window.addEventListener('beforeunload', () => {isOpen && restore()}, {passive: true});
+		window.addEventListener('error', () => {isOpen && restore()}, {passive: true});
+		window.addEventListener('unhandledrejection', updateOriginal, {passive: true});
 	};
 	const pushHistoryAgency = async (path, title) => {
 		if (!navigator || !navigator.locks) {
@@ -2951,19 +2823,6 @@ const netUtil = {
 };
 Object.assign(util, netUtil);
 const VideoCaptureUtil = (() => {
-	const crossDomainGates = {};
-	const initializeByServer = (server, fileId) => {
-		if (crossDomainGates[server]) {
-			return crossDomainGates[server];
-		}
-		const baseUrl = `https://${server}/smile?i=${fileId}`;
-		crossDomainGates[server] = new CrossDomainGate({
-			baseUrl,
-			origin: `https://${server}/`,
-			type: `storyboard${PRODUCT}_${server.split('.')[0].replace(/-/g, '_')}`
-		});
-		return crossDomainGates[server];
-	};
 	const _toCanvas = (v, width, height) => {
 		const canvas = document.createElement('canvas');
 		const context = canvas.getContext('2d');
@@ -2973,7 +2832,7 @@ const VideoCaptureUtil = (() => {
 		return canvas;
 	};
 	const isCORSReadySrc = src => {
-		if (src.indexOf('dmc.nico') >= 0) {
+		if (src.indexOf('delivery.domand.nicovideo.jp') >= 0 || src.indexOf('dmc.nico') >= 0) {
 			return true;
 		}
 		return false;
@@ -2988,28 +2847,7 @@ const VideoCaptureUtil = (() => {
 		if (isCORSReadySrc(src)) {
 			return Promise.resolve({canvas: _toCanvas(video, video.videoWidth, video.videoHeight)});
 		}
-		return new Promise(async (resolve, reject) => {
-			if (!/\?(.)=(\d+)\.(\d+)/.test(search)) {
-				return reject({status: 'fail', message: 'invalid url', url: src});
-			}
-			const fileId = RegExp.$2;
-			const gate = initializeByServer(server, fileId);
-			const dataUrl = await gate.videoCapture(src, sec);
-			const bin = atob(dataUrl.split(',')[1]);
-			const buf = new Uint8Array(bin.length);
-			for (let i = 0, len = buf.length; i < len; i++) {
-				buf[i] = bin.charCodeAt(i);
-			}
-			const blob = new Blob([buf.buffer], {type: 'image/png'});
-			const url = URL.createObjectURL(blob);
-			console.info('createObjectUrl', url.length);
-			const img = new Image();
-			img.src = url;
-			img.decode()
-				.then(() => resolve({canvas: _toCanvas(img, video.videoWidth, video.videoHeight)}))
-				.catch(err => reject(err))
-				.finally(() => window.setTimeout(() => URL.revokeObjectURL(url), 10000));
-		});
+		return Promise.reject({status: 'fail', message: 'not supported url', url: src})
 	};
 	const htmlToSvg = (html, width = 682, height = 384) => {
 		const data =
@@ -4343,7 +4181,7 @@ class BaseCommandElement extends HTMLElement {
 		if (dll.lit) {
 			return dll.lit;
 		}
-		dll.lit = await util.dimport('https://unpkg.com/lit-html?module');
+		dll.lit = await util.dimport('https://esm.run/lit');
 		return dll.lit;
 	}
 	static get observedAttributes() {
@@ -4388,16 +4226,14 @@ class BaseCommandElement extends HTMLElement {
 		return props;
 	}
 	async render() {
-		if (!this._isConnected) {
-			return;
-		}
 		const {render} = dll.lit || await this.constructor.importLit();
-		if (!this._shadow) {
-			this._shadow = this.attachShadow({mode: 'open'});
+		if (!this.shadowRoot) {
+			this.attachShadow({mode: 'open'});
 		}
-		render(await this.constructor.getTemplate(this.state, this.props, this.events), this._shadow);
+		const tmpl = await this.constructor.getTemplate(this.state, this.props, this.events);
+		render(tmpl, this.shadowRoot, { isConnected: this._isConnected });
 		if (!this._root) {
-			const root = this._shadow.querySelector('#root');
+			const root = this.shadowRoot.querySelector('#root');
 			if (!root) {
 				return;
 			}
@@ -4427,8 +4263,7 @@ class BaseCommandElement extends HTMLElement {
 			this._root = null;
 		}
 		const {render} = dll.lit || await this.constructor.importLit();
-		render('', this._shadow);
-		this._shadow = null;
+		render('', this.shadowRoot, { isConnected: this._isConnected });
 	}
 	attributeChangedCallback(attr, oldValue, newValue) {
 		attr = attr.startsWith('data-') ? this.constructor.toPropName(attr) : attr;
@@ -5335,11 +5170,16 @@ const {DialogElement, DialogProps} = (() => {
 					margin: 0 8px 0 0;
 					text-align: left;
 				}
-				h3 {
+				h3, h4 {
 					margin: 0 auto;
-					width: calc(100% - 16px);
 					background: rgba(192, 192, 192, 0.8);
 					box-shadow: none;
+				}
+				h3 {
+					width: calc(100% - 16px);
+				}
+				h4 {
+					width: calc(100% - 32px);
 				}
 				summary {
 					margin: 0 0 16px;
@@ -5481,6 +5321,14 @@ const {SettingPanelElement} = (() => {
 				<div class="control">
 					<label>
 						<input type="checkbox" class="checkbox"
+							data-setting-name="enableResume"
+							?checked=${conf.enableResume}>
+							続きから再生する
+					</label>
+				</div>
+				<div class="control">
+					<label>
+						<input type="checkbox" class="checkbox"
 						data-setting-name="enableTogglePlayOnClick"
 							?checked=${conf.enableTogglePlayOnClick}>
 							画面クリックで再生/一時停止
@@ -5554,8 +5402,8 @@ const {SettingPanelElement} = (() => {
 				<div class="control">
 					<label>
 						<input type="checkbox" class="checkbox"
-							data-setting-name="autoDisableDmc"
-							?checked=${conf.autoDisableDmc}>
+							data-setting-name="autoDisableNew"
+							?checked=${conf.autoDisableNew}>
 							旧システムのほうが画質が良さそうな時は旧システムを使う<br>
 							<small>たまに誤爆することがあります (回転情報の含まれる動画など)</small>
 					</label>
@@ -5708,6 +5556,13 @@ const {SettingPanelElement} = (() => {
 							data-setting-name="commentLayer.easyCommentOpacity" data-type="number"
 						>
 					</label>
+					<label>
+						AIキャラクターコメント
+						<input type="range" value=${conf.commentLayer.aiCommentOpacity}
+							min="0.1" max="1.0" step="0.1"
+							data-setting-name="commentLayer.aiCommentOpacity" data-type="number"
+						>
+					</label>
 				</div>
 				<div class="control">
 					<h3>コメントの影</h3>
@@ -5852,6 +5707,95 @@ const {SettingPanelElement} = (() => {
 								?checked=${conf.filter.fork2}
 								value="">
 								かんたんコメント
+						</label>
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.fork3"
+								?checked=${conf.filter.fork3}
+								value="">
+								AIキャラクターコメント
+						</label>
+						<h4>種類</h4>
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.defaultThread"
+								?checked=${conf.filter.defaultThread}
+								value="">
+								通常コメント
+						</label>
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.ownerThread"
+								?checked=${conf.filter.ownerThread}
+								value="">
+								投稿者コメント
+						</label>
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.communityThread"
+								?checked=${conf.filter.communityThread}
+								value="">
+								チャンネルコメント / コミュニティコメント
+						</label>
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.nicosThread"
+								?checked=${conf.filter.nicosThread}
+								value="">
+								ニコスクリプトコメント
+						</label>
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.easyThread"
+								?checked=${conf.filter.easyThread}
+								value="">
+								かんたんコメント
+						</label>
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.aiThread"
+								?checked=${conf.filter.aiThread}
+								value="">
+								AIキャラクターコメント
+						</label>
+						<!--
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.extraDefaultThread"
+								?checked=${conf.filter.extraDefaultThread}
+								value="">
+								***extra-default
+						</label>
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.extraOwnerThread"
+								?checked=${conf.filter.extraOwnerThread}
+								value="">
+								***extra-owner
+						</label>
+						-->
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.extraCommunityThread"
+								?checked=${conf.filter.extraCommunityThread}
+								value="">
+								引用コメント
+						</label>
+						<!--
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.extraNicosThread"
+								?checked=${conf.filter.extraNicosThread}
+								value="">
+								***extra-nicos
+						</label>
+						-->
+						<label class="short">
+							<input type="checkbox"
+								data-setting-name="filter.extraEasyThread"
+								?checked=${conf.filter.extraEasyThread}
+								value="">
+								引用かんたんコメント
 						</label>
 					</div>
 					<div class="control">
@@ -6026,7 +5970,7 @@ const {SettingPanelElement} = (() => {
 			domEvent.dispatchCommand(e.target, 'close');
 			const fileReader = new FileReader();
 			fileReader.onload = ev => {
-				this._playerConfig.importJson(ev.target.result);
+				this.config.importJson(ev.target.result);
 				location.reload();
 			};
 			fileReader.readAsText(file);
@@ -6137,8 +6081,8 @@ class PlayerState extends BaseState {
 			isCommunity: false,
 			isWaybackMode: false,
 			isDebug: config.props.debug,
+			isDomandAvailable: false,
 			isDmcAvailable: false,
-			isDmcPlaying: false,
 			isError: false,
 			isEnded: false,
 			isLoading: false,
@@ -6325,367 +6269,588 @@ const CacheStorage = (() => {
 })();
 const VideoInfoLoader = (function () {
 	const cacheStorage = new CacheStorage(sessionStorage);
-	const parseFromGinza = function (dom) {
-		try {
-			let watchApiData = JSON.parse(dom.querySelector('#watchAPIDataContainer').textContent);
-			let videoId = watchApiData.videoDetail.id;
-			let hasLargeThumbnail = nicoUtil.hasLargeThumbnail(videoId);
-			let flvInfo = textUtil.parseQuery(
-				decodeURIComponent(watchApiData.flashvars.flvInfo)
-			);
-			let dmcInfo = JSON.parse(
-				decodeURIComponent(watchApiData.flashvars.dmcInfo || '{}')
-			);
-			let thumbnail =
-				watchApiData.flashvars.thumbImage +
-				(hasLargeThumbnail ? '.L' : '');
-			let videoUrl = flvInfo.url ? flvInfo.url : '';
-			let isEco = /\d+\.\d+low$/.test(videoUrl);
-			let isFlv = /\/smile\?v=/.test(videoUrl);
-			let isMp4 = /\/smile\?m=/.test(videoUrl);
-			let isSwf = /\/smile\?s=/.test(videoUrl);
-			let isDmc = watchApiData.flashvars.isDmc === 1 && dmcInfo.movie.session;
-			let csrfToken = watchApiData.flashvars.csrfToken;
-			let playlistToken = watchApiData.playlistToken;
-			let watchAuthKey = watchApiData.flashvars.watchAuthKey;
-			let seekToken = watchApiData.flashvars.seek_token;
-			let threads = [];
-			let msgInfo = {
-				server: flvInfo.ms,
-				threadId: flvInfo.thread_id * 1,
-				duration: flvInfo.l,
-				userId: flvInfo.user_id,
-				isNeedKey: flvInfo.needs_key === '1',
-				optionalThreadId: flvInfo.optional_thread_id,
-				defaultThread: {id: flvInfo.thread_id * 1},
-				optionalThreads: [],
-				layers: [],
-				threads,
-				userKey: flvInfo.userkey,
-				hasOwnerThread: !!watchApiData.videoDetail.has_owner_thread,
-				when: null
-			};
-			if (msgInfo.hasOwnerThread) {
-				threads.push({
-					id: flvInfo.thread_id * 1,
-					isThreadkeyRequired: flvInfo.needs_key === '1',
-					isDefaultPostTarget: false,
-					fork: 1,
-					isActive: true,
-					label: 'owner'
-				});
-			}
-			threads.push({
-				id: flvInfo.thread_id * 1,
-				isThreadkeyRequired: flvInfo.needs_key === '1',
-				isDefaultPostTarget: true,
-				isActive: true,
-				label: flvInfo.needs_key === '1' ? 'community' : 'default'
-			});
-			let playlist =
-				JSON.parse(dom.querySelector('#playlistDataContainer').textContent);
-			const isPlayableSmile = isMp4 && !isSwf && (videoUrl.indexOf('http') === 0);
-			const isPlayable = isDmc || (isMp4 && !isSwf && (videoUrl.indexOf('http') === 0));
-			cacheStorage.setItem('csrfToken', csrfToken, 30 * 60 * 1000);
-			dmcInfo.quality = {
-				audios: (dmcInfo.movie.session || {audios: []}).audios.map(id => {return {id, available: true, bitrate: 64000};}),
-				videos: (dmcInfo.movie.session || {videos: []}).videos.reverse()
-				.map((id, level_index) => { return {
-					id,
-					available: true,
-					level_index,
-					bitrate: parseInt(id.replace(/^.*_(\d+)kbps.*/, '$1')) * 1000
-				};})
-				.reverse()
-			};
-			let result = {
-				_format: 'watchApi',
-				watchApiData,
-				flvInfo,
-				dmcInfo,
-				msgInfo,
-				playlist,
-				isDmcOnly: isPlayable && !isPlayableSmile,
-				isPlayable,
-				isMp4,
-				isFlv,
-				isSwf,
-				isEco,
-				isDmc,
-				thumbnail,
-				csrfToken,
-				playlistToken,
-				watchAuthKey,
-				seekToken
-			};
-			emitter.emitAsync('csrfTokenUpdate', csrfToken);
-			return result;
-		} catch (e) {
-			window.console.error('error: parseFromGinza ', e);
-			return null;
+	const parseWatchV3ApiData = (json) => {
+		const _data = json.data.response;
+		if (_data == null) {
+			return
 		}
+		const {
+			channel, // nullable
+			client: {
+				watchId,
+				watchTrackId,
+			},
+			comment: {
+				server: {
+					url: commentServer,
+				},
+				keys: {
+					userKey,
+				},
+				layers,
+				threads,
+				ng: {
+					channel: channelNg,
+					owner: ownerNg,
+				},
+				nvComment,
+				community, // nullable
+			},
+			external: {
+				commons: {
+					hasContentTree,
+				},
+			},
+			genre: {
+				key: genreKey,
+			},
+			media: {
+				domand: domandInfo, // nullable
+			},
+			owner, // nullable
+			payment: {
+				video: {
+					isPpv: isNeedPayment,
+					isAdmission: isMemberFree,
+					isContinuationBenefit: isMemberContinued,
+					isPremium: isPremiumFree,
+				},
+			},
+			player: {
+				initialPlayback, // nullable
+			},
+			series,
+			tag: {
+				items: tags,
+				edit: tagEdit,
+			},
+			video: {
+				id: videoId,
+				title,
+				description,
+				count: {
+					view: viewCount,
+					comment: commentCount,
+					mylist: mylistCount,
+					like: likeCount,
+				},
+				duration,
+				thumbnail: {
+					url: thumbnail,
+					largeUrl: thumbnailUrl, // null
+					player: largeThumbnail,
+				},
+				registeredAt,
+				viewer: videoStatusForViewer, // nullable
+			},
+			viewer, // nullable
+		} = _data;
+		const threadsWithLayer = threads.map(thread => {
+			return {
+				...thread,
+				layer: layers.find(({threadIds}) => {
+					return threadIds.some(({id, fork}) => id === thread.id && fork === thread.fork);
+				})
+			}
+		});
+		const defaultThread = threadsWithLayer.find(t => t.isDefaultPostTarget);
+		const resumeInfo = {
+			type: initialPlayback?.type ?? '',
+			positionSec: initialPlayback?.positionSec ?? 0,
+		};
+		const {
+			like: {
+				isLiked = false,
+			},
+		} = videoStatusForViewer;
+		const viewerInfo = {
+			id: viewer?.id ?? 0,
+			isPremium: viewer?.isPremium ?? false,
+		};
+		let ownerInfo;
+		if (channel != null) {
+			const {
+				id,
+				name,
+				thumbnail: {
+					url,
+					smallUrl,
+				},
+			} = { ...channel };
+			ownerInfo = {
+				type: "channel",
+				iconUrl: smallUrl ?? url,
+				id,
+				name,
+			}
+		}
+		if (owner != null) {
+			const {
+				id,
+				nickname: name,
+				iconUrl,
+			} = { ...owner };
+			ownerInfo = {
+				type: "user",
+				iconUrl,
+				id,
+				name,
+			}
+		}
+		return {
+			_version: "3",
+			_data,
+			client: {
+				watchId,
+				watchTrackId,
+			},
+			comment: {
+				server: commentServer,
+				userKey,
+				threads: threadsWithLayer,
+				nvComment,
+				defaultThread,
+				ng: channelNg.concat(ownerNg),
+			},
+			community,
+			external: {
+				commons: {
+					hasContentTree,
+				},
+			},
+			genre: {
+				key: genreKey,
+			},
+			payment: {
+				isNeedPayment,
+				isMemberFree,
+				isMemberContinued,
+				isPremiumFree,
+			},
+			series,
+			tags,
+			tagEdit,
+			video: {
+				id: videoId,
+				title,
+				description,
+				count: {
+					view: viewCount,
+					comment: commentCount,
+					mylist: mylistCount,
+					like: likeCount,
+				},
+				duration,
+				thumbnail: {
+					normal: thumbnail,
+					large: thumbnailUrl,
+					player: largeThumbnail,
+				},
+				registeredAt,
+				isLiked,
+			},
+			domandInfo,
+			ownerInfo,
+			viewerInfo,
+			resumeInfo,
+		};
 	};
-	const parseFromHtml5Watch = function (dom) {
-		const watchDataContainer = dom.querySelector('#js-initial-watch-data');
-		const data = JSON.parse(watchDataContainer.getAttribute('data-api-data'));
-		const env = JSON.parse(watchDataContainer.getAttribute('data-environment'));
-		const videoId = data.video.id;
-		const hasLargeThumbnail = nicoUtil.hasLargeThumbnail(videoId);
-		const flvInfo = data.video.smileInfo || {};
-		const dmcInfo = data.media.delivery || {};
-		const thumbnail = data.video.thumbnail.largeUrl;
-		const videoUrl = flvInfo.url ? flvInfo.url : '';
-		const isEco = /\d+\.\d+low$/.test(videoUrl);
-		const isFlv = /\/smile\?v=/.test(videoUrl);
-		const isMp4 = /\/smile\?m=/.test(videoUrl);
-		const isSwf = /\/smile\?s=/.test(videoUrl);
-		const isDmc = !!dmcInfo && !!dmcInfo.movie.session;
+	const parseWatchV4ApiData = (json) => {
+		const _data = json.data.response.$watchV4?.data;
+		if (_data == null) {
+			return
+		}
+		const {
+			client: {
+				watchId,
+				watchTrackId,
+			},
+			comment: {
+				layers,
+				ng: {
+					owner: ngFilters,
+				},
+				nvComment,
+				threads,
+			},
+			genre: {
+				key: genreKey,
+			},
+			media, // nullable
+			metadata: {
+				jsonLd: {
+					owner,
+				},
+			},
+			payment: {
+				ppv: {
+					isEnabled: isNeedPayment,
+				},
+				admission: {
+					isEnabled: isMemberFree,
+				},
+				continuationBenefit: {
+					isEnabled: isMemberContinued,
+				},
+				premium: {
+					isEnabled: isPremiumFree,
+				},
+			},
+			player: {
+				initialPlayback, // nullable
+			},
+			lazy: {
+				authKey: additionalInfoKey,
+			},
+			tags: {
+				edit: tagEdit,
+				items: tags,
+			},
+			video: {
+				count: {
+					comment: commentCount,
+					like: likeCount,
+					mylist: mylistCount,
+					view: viewCount,
+				},
+				description,
+				duration,
+				id: videoId,
+				permission: {
+					isPrivate,
+					isDeleted,
+					isAuthenticationRequired,
+					isEmbedPlayerAllowed,
+					isGiftAllowed,
+				},
+				registeredAt,
+				thumbnail: {
+					large: thumbnailUrl, // null
+					normal: thumbnail,
+					player: largeThumbnail,
+				},
+				title,
+				viewer: videoStatusForViewer, // nullable
+				isLikedByViewer: isLiked,
+			},
+			viewer, // nullable
+		} = _data;
+		const threadsWithLayer = threads.map(thread => {
+			return {
+				...thread,
+				layer: layers.find(({components}) => {
+					return components.some(({threadId, fork}) => threadId === thread.id && fork === thread.fork);
+				})
+			}
+		});
+		const defaultThread = threadsWithLayer.find(t => t.isPostTarget);
+		const resumeInfo = {
+			type: initialPlayback?.type ?? '',
+			positionSec: initialPlayback?.positionSec ?? 0,
+		};
+		const viewerInfo = {
+			id: viewer?.id ?? 0,
+			isPremium: viewer?.isPremium ?? false,
+		};
+		const ownerInfo = {
+			type: owner?.type,
+			id: owner?.id,
+			name: owner?.name,
+			iconUrl: owner?.iconUrl,
+		};
+		const {
+			contents: domandContent,
+			...domandInfo
+		} = media;
+		return {
+			_version: "4",
+			_data,
+			client: {
+				watchId,
+				watchTrackId,
+			},
+			comment: {
+				nvComment,
+				threads: threadsWithLayer,
+				defaultThread,
+				ng: ngFilters,
+			},
+			genre: {
+				key: genreKey,
+			},
+			payment: {
+				isNeedPayment,
+				isMemberFree,
+				isMemberContinued,
+				isPremiumFree,
+			},
+			lazy: {
+				authKey: additionalInfoKey,
+			},
+			tags,
+			tagEdit,
+			video: {
+				count: {
+					comment: commentCount,
+					like: likeCount,
+					mylist: mylistCount,
+					view: viewCount,
+				},
+				description,
+				duration,
+				id: videoId,
+				permission: {
+					isPrivate,
+					isDeleted,
+					isAuthenticationRequired,
+					isEmbedPlayerAllowed,
+					isGiftAllowed,
+				},
+				registeredAt,
+				thumbnail: {
+					normal: thumbnail,
+					large: thumbnailUrl,
+					player: largeThumbnail,
+				},
+				title,
+				isLiked,
+			},
+			domandInfo: {
+				...domandContent,
+				...domandInfo,
+			},
+			ownerInfo,
+			viewerInfo,
+			resumeInfo,
+		};
+	};
+	const loadWatchV4Lazy = ({videoId, token, trackId}) => {
+		const url = `https://nvapi.nicovideo.jp/v4/watch/lazy/${videoId}`;
+		return new Promise(r => {
+			setTimeout(r, 1000);
+		}).then(() => netUtil.fetch(url, {
+			method: 'POST',
+			headers: {
+				'X-Frontend-Id': 6,
+				'X-Frontend-Version': 0,
+				'X-Niconico-Language': 'ja-jp',
+				'X-Request-With': 'https://www.nicovideo.jp',
+				'Content-Type': 'application/json',
+			},
+			credentials: 'include',
+			body: JSON.stringify({
+				actionTrackId: trackId,
+				keyToken: token,
+			}),
+		}))
+			.then(res => res.json())
+			.then(json => json.data)
+			.catch(() => {
+				return Promise.reject({
+					reason: 'network',
+					message: '通信エラー(loadWatchV4Lazy)',
+				});
+			});
+	};
+	const parseWatchApiData = async (json) => {
+		const _data = parseWatchV4ApiData(json) ?? parseWatchV3ApiData(json);
+		if (_data == null) {
+			throw {
+				reason: 'network',
+				message: '通信エラー。動画情報の取得に失敗しました。(watch api)'
+			};
+		}
+		if (_data._version === "4") {
+			_data._lazy = await loadWatchV4Lazy({
+				videoId: _data.video.id,
+				token: _data.lazy.authKey,
+				trackId: _data.client.watchTrackId,
+			});
+			_data.series = _data._lazy.series;
+		}
 		const csrfToken = null;
 		const watchAuthKey = null;
-		const playlistToken = env.playlistToken; //項目は残ってるけど値は出なくなってる
-		const context = data.context;
-		const commentComposite = data.comment;
-		const threads = commentComposite.threads.map(t => Object.assign({}, t));
-		const layers  = commentComposite.layers.map(t => Object.assign({}, t));
-		layers.forEach(layer => {
-			layer.threadIds.forEach(({id, fork}) => {
-				threads.forEach(thread => {
-					if (thread.id === id && fork === 0) {
-						thread.layer = layer;
-					}
-				});
-			});
-		});
-		const linkedChannelVideo = false;
-		const isNeedPayment = false;
-		const defaultThread = threads.find(t => t.isDefaultPostTarget);
-		const msgInfo = {
-			server: commentComposite.server.url,
-			threadId: defaultThread ? defaultThread.id : (data.thread.ids.community || data.thread.ids.default),
-			duration: data.video.duration,
-			userId: data.viewer ? data.viewer.id : 0,
-			isNeedKey: threads.findIndex(t => t.isThreadkeyRequired) >= 0, // (isChannel || isCommunity)
-			optionalThreadId: '',
-			defaultThread,
-			optionalThreads: threads.filter(t => t.id !== defaultThread.id) || [],
-			threads,
-			userKey: data.comment.keys.userKey,
-			hasOwnerThread: threads.find(t => t.isOwnerThread),
-			when: null,
-			frontendId : env.frontendId,
-			frontendVersion : env.frontendVersion
-		};
-		const isPlayableSmile = isMp4 && !isSwf && (videoUrl.indexOf('http') === 0);
-		const isPlayable = isDmc || (isMp4 && !isSwf && (videoUrl.indexOf('http') === 0));
 		cacheStorage.setItem('csrfToken', csrfToken, 30 * 60 * 1000);
-		const playlist = {playlist: []};
-		const tagList = [];
-		data.tag.items.forEach(t => {
-			tagList.push({
-				_data: t,
-				name: t.name,
-				isNicodicArticleExists: t.isNicodicArticleExists,
-				isLocked: t.isLocked, // 形式が統一されてない悲しみを吸収
-				isLockedBySystem: t.isLocked ? 1 : 0
-			});
+		const msgInfo = {
+			server: _data.comment.server,
+			threadId: _data.comment.defaultThread.id,
+			duration: _data.video.duration,
+			videoId: _data.video.id,
+			nvComment: _data.comment.nvComment,
+			userId: _data.viewerInfo.id,
+			defaultThread: _data.comment.defaultThread,
+			threads: _data.comment.threads,
+			userKey: _data.comment.userKey,
+			when: null,
+			frontendId: 6,
+			frontendVersion: 0
+		};
+		const isDomand = _data.domandInfo != null;
+		const tagList = _data.tags.map(tag => {
+			const {
+				isLocked,
+				isNicodicArticleExists,
+				name,
+			} = tag;
+			return {
+				_data: tag,
+				isLocked,
+				isNicodicArticleExists,
+				name,
+			}
 		});
-		/*
-			FLASHは廃止になりました
-			data.tag.items.forEach(t => {
-				tagList.push({
-					_data: t,
-					id: t.id,
-					tag: t.name,
-					dic: t.isNicodicArticleExists,
-					lock: t.isLocked, // 形式が統一されてない悲しみを吸収
-					owner_lock: t.isLocked ? 1 : 0,
-					lck: t.isLocked ? '1' : '0',
-					cat: t.isCategory
-				});
-			});
-		*/
-		let channelInfo = null, channelId = null;
-		if (data.channel) {
-			channelInfo = {
-				icon_url: data.channel.thumbnail.smallUrl || '',
-				id: data.channel.id,
-				name: data.channel.name,
-				is_favorited: data.channel.isFavorited ? 1 : 0
-			};
-			channelId = channelInfo.id;
-		}
-		let uploaderInfo = null;
-		if (data.owner) {
-			uploaderInfo = {
-				icon_url: data.owner.iconUrl,
-				id: data.owner.id,
-				nickname: data.owner.nickname,
-				is_favorited: data.owner.isFavorited,
-				isMyVideoPublic: data.owner.isUserMyVideoPublic
-			};
-		}
 		const watchApiData = {
 			videoDetail: {
-				v: data.client.watchId,
-				id: data.video.id,
-				title: data.video.title,
-				title_original: data.video.originalTitle,
-				description: data.video.description,
-				description_original: data.video.originalDescription,
-				postedAt: new Date(data.video.registeredAt).toLocaleString(),
-				thumbnail: data.video.thumbnail.url,
-				largeThumbnail: data.video.thumbnail.player,
-				length: data.video.duration,
-				commons_tree_exists: !!data.external.commons.hasContentTree,
-				width: data.video.width,
-				height: data.video.height,
-				isChannel: data.channel && data.channel.id,
+				v: _data.client.watchId,
+				id: _data.video.id,
+				title: _data.video.title,
+				description: _data.video.description,
+				postedAt: _data.video.registeredAt,
+				thumbnail: _data.video.thumbnail.normal,
+				largeThumbnail: _data.video.thumbnail.player,
+				length: _data.video.duration,
+				commons_tree_exists: _data.external?.commons?.hasContentTree ?? true,
 				isMymemory: false,
-				communityId: data.community ? data.community.id : null,
-				isPremiumOnly: data.viewer ? data.viewer.isPremiumOnly : false,
-				isLiked: data.video.viewer ? data.video.viewer.like.isLiked : false,
-				channelId,
-				commentCount: data.video.count.comment,
-				mylistCount: data.video.count.mylist,
-				viewCount: data.video.count.view,
+				communityId: _data.community?.id ?? null,
+				isLiked: _data.video.isLiked,
+				commentCount: _data.video.count.comment,
+				likeCount: _data.video.count.like,
+				mylistCount: _data.video.count.mylist,
+				viewCount: _data.video.count.view,
 				tagList,
+				tagEdit: _data.tagEdit,
 			},
-			viewerInfo: {id: data.viewer ? data.viewer.id : 0},
-			channelInfo,
-			uploaderInfo
+			viewerInfo: _data.viewerInfo,
+			ownerInfo: _data.ownerInfo,
+			additionalInfoKey: _data.lazy?.authKey,
+			clientTrackId: _data.client.watchTrackId,
 		};
-		let ngFilters = null;
-		if (data.video && data.video.dmcInfo && data.video.dmcInfo.thread && data.video.dmcInfo.thread) {
-			if (data.video.dmcInfo.thread.channel_ng_words && data.video.dmcInfo.thread.channel_ng_words.length) {
-				ngFilters = data.video.dmcInfo.thread.channel_ng_words;
-			} else if (data.video.dmcInfo.thread.owner_ng_words && data.video.dmcInfo.thread.owner_ng_words.length) {
-				ngFilters = data.video.dmcInfo.thread.owner_ng_words;
-			}
-		}
-		if (data.context && data.context.ownerNGList && data.context.ownerNGList.length) {
-			ngFilters = data.context.ownerNGList;
-		}
-		if (ngFilters && ngFilters.length) {
-			const ngtmp = [];
-			ngFilters.forEach(ng => {
-				if (!ng.source || !ng.destination) { return; }
-				ngtmp.push(
-					encodeURIComponent(ng.source) + '=' + encodeURIComponent(ng.destination));
-			});
-			flvInfo.ng_up = ngtmp.join('&');
-		}
 		const result = {
 			_format: 'html5watchApi',
-			_data: data,
+			_data,
 			watchApiData,
-			flvInfo,
-			dmcInfo,
+			domandInfo: _data.domandInfo,
 			msgInfo,
-			playlist,
-			isDmcOnly: isPlayable && !isPlayableSmile,
-			isPlayable,
-			isMp4,
-			isFlv,
-			isSwf,
-			isEco,
-			isDmc,
-			thumbnail,
+			playlist: {
+				playlist: [],
+			},
+			isPlayable: isDomand,
+			isDomand,
+			isDmc: false,
+			thumbnailUrl: _data.video.thumbnail.large,
 			csrfToken,
 			watchAuthKey,
-			playlistToken,
-			series: data.series,
-			isNeedPayment,
-			linkedChannelVideo,
-			resumeInfo: {
-				initialPlaybackType: (data.player.initialPlayback? data.player.initialPlayback.type : ''),
-				initialPlaybackPosition: (data.player.initialPlayback? data.player.initialPlayback.positionSec : 0)
-			}
+			genreKey: _data.genre.key,
+			series: _data.series,
+			ngFilters: _data.comment.ng,
+			isMemberFree: _data.payment.isMemberFree,
+			isMemberContinued: _data.payment.isMemberContinued,
+			isNeedPayment: _data.payment.isNeedPayment,
+			isPremiumFree: _data.payment.isPremiumFree,
+			linkedChannelVideo: null,
+			resumeInfo: _data.resumeInfo,
 		};
 		emitter.emitAsync('csrfTokenUpdate', csrfToken);
 		return result;
-	};
-	const parseWatchApiData = function (src) {
-		const dom = new DOMParser().parseFromString(src, 'text/html');
-		if (dom.querySelector('#watchAPIDataContainer')) {
-			return parseFromGinza(dom);
-		} else if (dom.querySelector('#js-initial-watch-data')) {
-			return parseFromHtml5Watch(dom);
-		} else if (dom.querySelector('#PAGEBODY .mb16p4 .font12')) {
-			return {
-				reject: true,
-				reason: 'forbidden',
-				message: dom.querySelector('#PAGEBODY .mb16p4 .font12').textContent,
-			};
-		} else {
-			return null;
-		}
 	};
 	const loadLinkedChannelVideoInfo = (originalData) => {
 		const linkedChannelVideo = originalData.linkedChannelVideo;
 		const originalVideoId = originalData.watchApiData.videoDetail.id;
 		const videoId = linkedChannelVideo.linkedVideoId;
-		originalData.linkedChannelData = null;
 		if (originalVideoId === videoId) {
+			originalData.linkedChannelVideo = null;
 			return Promise.reject();
 		}
-		const url = `https://www.nicovideo.jp/watch/${videoId}`;
+		const url = `https://www.nicovideo.jp/watch/${videoId}?responseType=json`;
 		window.console.info('%cloadLinkedChannelVideoInfo', 'background: cyan', linkedChannelVideo);
 		return new Promise(r => {
 			setTimeout(r, 1000);
-		}).then(() => netUtil.fetch(url, {credentials: 'include'}))
-			.then(res => res.text())
-			.then(html => {
-				const dom = new DOMParser().parseFromString(html, 'text/html');
-				const data = parseFromHtml5Watch(dom);
-				originalData.dmcInfo = data.dmcInfo;
-				originalData.isDmcOnly = data.isDmcOnly;
+		}).then(() => netUtil.fetch(url, {
+			credentials: 'include',
+		}))
+			.then(res => res.json())
+			.then(async json => {
+				const data = await parseWatchApiData(json);
+				originalData.domandInfo = data.domandInfo;
 				originalData.isPlayable = data.isPlayable;
-				originalData.isMp4 = data.isMp4;
-				originalData.isFlv = data.isFlv;
-				originalData.isSwf = data.isSwf;
-				originalData.isEco = data.isEco;
 				originalData.isDmc = data.isDmc;
+				originalData.isDomand = data.isDomand;
 				return originalData;
 			})
 			.catch(() => {
-				return Promise.reject({reason: 'network', message: '通信エラー(loadLinkedChannelVideoInfo)'});
+				originalData.linkedChannelVideo = null;
+				return Promise.reject({
+					reason: 'network',
+					message: '通信エラー(loadLinkedChannelVideoInfo)',
+				});
 			});
 	};
-	const onLoadPromise = (watchId, options, isRetry, resp) => {
-		const data = parseWatchApiData(resp);
+	const onLoadPromise = async (watchId, options, isRetry, resp) => {
+		const data = await parseWatchApiData(resp);
 		debug.watchApiData = data;
-		if (!data) {
-			return Promise.reject({
-				reason: 'network',
-				message: '通信エラー。動画情報の取得に失敗しました。(watch api)'
+		if (data.isPlayable) {
+			emitter.emitAsync('loadVideoInfo', data, 'WATCH_API', watchId);
+			return data;
+		}
+		if (data.isNeedPayment && data.genreKey === 'anime' && Config.getValue('loadLinkedChannelVideo')) {
+			const query = new URLSearchParams({
+				videoId: data.watchApiData.videoDetail.id,
+				_frontendId: data.msgInfo.frontendId,
 			});
-		}
-		if (data.reject) {
-			return Promise.reject(data);
-		}
-		if (!data.isDmc && (data.isFlv && !data.isEco)) {
-			return Promise.reject({
-				reason: 'flv',
-				info: data,
-				message: 'この動画はZenzaWatchで再生できません(flv)'
+			const url = `https://public-api.ch.nicovideo.jp/v1/user/channelVideoDAnimeLinks?${query.toString()}`;
+			const linkedChannelVideos = await netUtil.fetch(url, {
+				credentials: 'include',
+			})
+				.then(r => r.json())
+				.catch(() => ({}));
+			data.linkedChannelVideo = linkedChannelVideos.data?.items?.find(ch => {
+				return !!ch.isChannelMember;
 			});
+			if (data.linkedChannelVideo != null) {
+				return await loadLinkedChannelVideoInfo(data);
+			}
 		}
-		if (
-			!data.isPlayable &&
-			data.isNeedPayment &&
-			data.linkedChannelVideo &&
-			Config.getValue('loadLinkedChannelVideo')) {
-			return loadLinkedChannelVideoInfo(data);
-		}
-		if (!data.isPlayable) {
-			return Promise.reject({
-				reason: 'not supported',
-				info: data,
-				message: 'この動画はZenzaWatchで再生できません'
-			});
-		}
-		emitter.emitAsync('loadVideoInfo', data, 'WATCH_API', watchId);
-		return Promise.resolve(data);
+		const error = (({isMemberFree, isMemberContinued, isNeedPayment, isPremiumFree}) => {
+			if (!isNeedPayment && isPremiumFree) {
+				return {
+					reason: 'premium only',
+					message: 'プレミアム会員限定',
+				};
+			}
+			if (!isNeedPayment && isMemberFree && isMemberContinued) {
+				return {
+					reason: 'member continuation benefit',
+					message: 'CH会員継続特典',
+				};
+			}
+			if (!isNeedPayment && isMemberFree) {
+				return {
+					reason: 'member only',
+					message: 'CH会員限定',
+				};
+			}
+			if (!isNeedPayment) {
+				return {
+					reason: 'not supported',
+					message: 'この動画はZenzaWatchで再生できません',
+				};
+			}
+			let err = {
+				reason: 'need payment',
+				message: 'この動画は有料です',
+			};
+			if (isPremiumFree) {
+				err.message += ' (プレミアム会員無料)';
+			}
+			if (isMemberFree) {
+				err.message += ' (CH会員無料)';
+			}
+			return err;
+		})(data);
+		throw {
+			...error,
+			info: data,
+		};
 	};
 	const createSleep = function (sleepTime) {
 		return new Promise(resolve => setTimeout(resolve, sleepTime));
@@ -6693,16 +6858,21 @@ const VideoInfoLoader = (function () {
 	const loadPromise = function (watchId, options, isRetry = false) {
 		let url = `https://www.nicovideo.jp/watch/${watchId}`;
 		console.log('%cloadFromWatchApiData...', 'background: lightgreen;', watchId, url);
-		const query = [];
+		const query = ['responseType=json'];
 		if (options.economy === true) {
 			query.push('eco=1');
 		}
 		if (query.length > 0) {
 			url += '?' + query.join('&');
 		}
-		return netUtil.fetch(url, {credentials: 'include'})
-			.then(res => res.text())
-			.catch(() => Promise.reject({reason: 'network', message: '通信エラー(network)'}))
+		return netUtil.fetch(url, {
+			credentials: 'include',
+		})
+			.then(res => res.json())
+			.catch(() => Promise.reject({
+				reason: 'network',
+				message: '通信エラー(network)',
+			}))
 			.then(onLoadPromise.bind(this, watchId, options, isRetry))
 			.catch(err => {
 				window.console.error('err', {err, isRetry, url, query});
@@ -6780,12 +6950,94 @@ const ThumbInfoLoader = (() => {
 	};
 	return {initGate, load};
 })();
+const PlaylistApiLoader = (() => {
+	const CACHE_EXPIRE_TIME = 5 * 60 * 1000;
+	let cacheStorage = null;
+	class PlaylistApiLoader {
+		constructor() {
+			if (!cacheStorage) {
+				cacheStorage = new CacheStorage(sessionStorage);
+			}
+		}
+		async load({ type, id, options }, { frontendId = 6, frontendVersion = 0 } = {}) {
+			const { url, cacheKey } = ((type) => {
+				switch (type) {
+					case 'series':
+						return this._buildSeriesURL(id);
+					case 'user-uploaded':
+						return this._buildUserUploadedURL(id, options);
+					case 'mylist':
+						return this._buildMylistURL(id, options);
+					case 'watchlater':
+						return this._buildWatchlaterURL(options);
+					case 'search':
+						return this._buildSearchURL(options);
+					default:
+						return {};
+				}
+			})(type);
+			if (url === undefined || cacheKey === undefined) {
+				throw new Error(`プレイリストの取得失敗(3) ${type}`);
+			}
+			const cacheData = cacheStorage.getItem(cacheKey);
+			if (cacheData) {
+				return cacheData;
+			}
+			const result = await netUtil.fetch(url, {
+				headers: { 'X-Frontend-Id': frontendId, 'X-Frontend-Version': frontendVersion },
+				credentials: 'include',
+			}).then(r => r.json())
+				.catch(e => { throw new Error(`プレイリストの取得失敗(2) ${type}`, e); });
+			if (result.meta.status !== 200 || !result.data.items) {
+				throw new Error(`プレイリストの取得失敗(1) ${type}`, result);
+			}
+			const data = result.data.items;
+			cacheStorage.setItem(cacheKey, data, CACHE_EXPIRE_TIME);
+			return data;
+		}
+		_buildSeriesURL(seriesId) {
+			return {
+				url: `https://nvapi.nicovideo.jp/v1/playlist/series/${seriesId}`,
+				cacheKey: `playlist; series: ${seriesId}`,
+			};
+		}
+		_buildUserUploadedURL(userId, options = {}) {
+			const query = new URLSearchParams(Object.assign({ sortOrder: 'desc', sortKey: 'registeredAt' }, options));
+			return {
+				url: `https://nvapi.nicovideo.jp/v1/playlist/user-uploaded/${userId}?${query.toString()}`,
+				cacheKey: `playlist; user-uploaded: ${userId}, orderBy: ${query.get('sortKey')} ${query.get('sortOrder')}`,
+			};
+		}
+		_buildMylistURL(mylistId, options = {}) {
+			const query = new URLSearchParams(Object.assign({ sortOrder: 'asc', sortKey: 'registeredAt' }, options));
+			return {
+				url: `https://nvapi.nicovideo.jp/v1/playlist/mylist/${mylistId}?${query.toString()}`,
+				cacheKey: `playlist; mylist: ${mylistId}, orderBy: ${query.get('sortKey')} ${query.get('sortOrder')}`,
+			};
+		}
+		_buildWatchlaterURL(options = {}) {
+			const query = new URLSearchParams(Object.assign({ sortOrder: 'asc', sortKey: 'registeredAt' }, options));
+			return {
+				url: `https://nvapi.nicovideo.jp/v1/playlist/watch-later?${query.toString()}`,
+				cacheKey: `playlist; watchlater, orderBy: ${query.get('sortKey')} ${query.get('sortOrder')}`,
+			};
+		}
+		_buildSearchURL(options = {}) {
+			const query = new URLSearchParams(Object.assign({ sortOrder: 'desc', sortKey: 'registeredAt' }, options));
+			return {
+				url: `https://nvapi.nicovideo.jp/v1/playlist/search?${query.toString()}`,
+				cacheKey: `playlist; search, query: ${query.toString()}`,
+			};
+		}
+	}
+	return new PlaylistApiLoader();
+})();
 const MylistApiLoader = (() => {
 	const CACHE_EXPIRE_TIME = 5 * 60 * 1000;
 	const TOKEN_EXPIRE_TIME = 59 * 60 * 1000;
 	let cacheStorage = null;
 	let token = '';
-	if (ZenzaWatch) {
+	if (window.ZenzaWatch) {
 		emitter.on('csrfTokenUpdate', t => {
 			token = t;
 			if (cacheStorage) {
@@ -6835,11 +7087,57 @@ const MylistApiLoader = (() => {
 				}
 				return token;
 		}
-		async getDeflistItems(options = {}, frontendId = 6, frontendVersion = 0) {
-			options.order = options.order == null ? 'asc' : options.order;
-			options.sort = options.sort == null ? 'registeredAt' : options.sort;
-			const url = `https://nvapi.nicovideo.jp/v1/playlist/watch-later?sortOrder=${options.order}&sortKey=${options.sort}`;
-			const cacheKey = `watchLaterItems, order: ${options.order} ${options.sort}`;
+		async _getDeflistItems(frontendId = 6, frontendVersion = 0) {
+			const url = 'https://nvapi.nicovideo.jp/v1/users/me/watch-later?sortKey=addedAt&sortOrder=desc';
+			const page = new URLSearchParams({ pageSize: 100, page: 1 });
+			let data;
+			do {
+				const res = await netUtil.fetch(`${url}&${page.toString()}`, {
+					headers: {'X-Frontend-Id': frontendId, 'X-Frontend-Version': frontendVersion},
+					credentials: 'include'
+				}).then(r => r.json())
+					.catch(e => { throw new Error('とりあえずマイリストの取得失敗(2)', e); });
+				if (res.meta.status !== 200 || !res.data.watchLater) {
+					throw new Error('とりあえずマイリストの取得失敗(1)', res);
+				}
+				if (data == null) {
+					data = res.data.watchLater;
+				} else {
+					data.hasInvisibleItems = data.hasInvisibleItems || res.data.watchLater.hasInvisibleItems;
+					data.hasNext = res.data.watchLater.hasNext;
+					data.items.concat(res.data.watchLater.items);
+				}
+				page.set('page', parseInt(page.get('page')) + 1);
+			} while (data && data.hasNext);
+			return data.items;
+		}
+		async _getMylistItems(id, frontendId = 6, frontendVersion = 0) {
+			const url = `https://nvapi.nicovideo.jp/v1/users/me/mylists/${id}`;
+			const page = new URLSearchParams({ pageSize: 100, page: 1 });
+			let data;
+			do {
+				const res = await netUtil.fetch(`${url}?${page.toString()}`, {
+					headers: {'X-Frontend-Id': frontendId, 'X-Frontend-Version': frontendVersion},
+					credentials: 'include'
+				}).then(r => r.json())
+					.catch(e => { throw new Error('マイリスト取得失敗(2)', e); });
+				if (res.meta.status !== 200 || !res.data.mylist) {
+					throw new Error('マイリスト取得失敗(1)', res);
+				}
+				if (data == null) {
+					data = res.data.mylist;
+				} else {
+					data.hasInvisibleItems = data.hasInvisibleItems || res.data.mylist.hasInvisibleItems;
+					data.hasNext = res.data.mylist.hasNext;
+					data.items.concat(res.data.mylist.items);
+				}
+				page.set('page', parseInt(page.get('page')) + 1);
+			} while (data && data.hasNext);
+			return data.items;
+		}
+		async getMylistList({ frontendId = 6, frontendVersion = 0 } = {}) {
+			const url = 'https://nvapi.nicovideo.jp/v1/users/me/mylists';
+			const cacheKey = 'mylistList';
 			const cacheData = cacheStorage.getItem(cacheKey);
 			if (cacheData) {
 				return cacheData;
@@ -6848,138 +7146,84 @@ const MylistApiLoader = (() => {
 				headers: {'X-Frontend-Id': frontendId, 'X-Frontend-Version': frontendVersion},
 				credentials: 'include'
 			}).then(r => r.json())
-				.catch(e => { throw new Error('とりあえずマイリストの取得失敗(2)', e); });
-			if (result.meta.status !== 200 || !result.data.items) {
-				throw new Error('とりあえずマイリストの取得失敗(1)', result);
-			}
-			const data = result.data.items;
-			cacheStorage.setItem(cacheKey, data, CACHE_EXPIRE_TIME);
-			return data;
-		}
-		async getMylistItems(groupId, options = {}, { frontendId = 6, frontendVersion = 0 } = {}) {
-			if (groupId === 'deflist') {
-				return this.getDeflistItems(options, frontendId, frontendVersion);
-			}
-			options.order = options.order == null ? 'asc' : options.order;
-			options.sort = options.sort == null ? 'registeredAt' : options.sort;
-			const url = `https://nvapi.nicovideo.jp/v1/playlist/mylist/${groupId}?sortOrder=${options.order}&sortKey=${options.sort}`;
-			const cacheKey = `mylistItems: ${groupId}, order: ${options.order} ${options.sort}`;
-			const cacheData = cacheStorage.getItem(cacheKey);
-			if (cacheData) {
-				return cacheData;
-			}
-			const result = await netUtil.fetch(url, {
-				headers: { 'X-Frontend-Id': frontendId, 'X-Frontend-Version': frontendVersion },
-				credentials: 'include',
-			}).then(r => r.json())
-				.catch(e => { throw new Error('マイリストの取得失敗(2)', e); });
-			if (result.meta.status !== 200 || !result.data.items) {
-				throw new Error('マイリストの取得失敗(1)', result);
-			}
-			const data = result.data.items;
-			cacheStorage.setItem(cacheKey, data, CACHE_EXPIRE_TIME);
-			return data;
-		}
-		async getMylistList() {
-			const url = 'https://www.nicovideo.jp/api/mylistgroup/list';
-			const cacheKey = 'mylistList';
-			const cacheData = cacheStorage.getItem(cacheKey);
-			if (cacheData) {
-				return cacheData;
-			}
-			const result = await netUtil.fetch(url, {credentials: 'include'})
-					.then(r => r.json())
-					.catch(e => { throw new Error('マイリスト一覧の取得失敗(2)', e); });
-			if (result.status !== 'ok' || !result.mylistgroup) {
+				.catch(e => { throw new Error('マイリスト一覧の取得失敗(2)', e); });
+			if (result.meta.status !== 200 || !result.data.mylists) {
 				throw new Error(`マイリスト一覧の取得失敗(1) ${result.status}${result.message}`, result);
 			}
-			const data = result.mylistgroup;
+			const data = result.data.mylists;
 			cacheStorage.setItem(cacheKey, data, CACHE_EXPIRE_TIME);
 			return data;
 		}
 		async findDeflistItemByWatchId(watchId) {
-			const items = await this.getDeflistItems().catch(e => { throw new Error('とりあえずマイリストの取得失敗(3)', e); });
-			for (let i = 0, len = items.length; i < len; i++) {
-				let item = items[i], wid = item.content.id ;
-				if (wid === watchId) {
+			const items = await this._getDeflistItems().catch(() => []);
+			for (let item of items) {
+				if (item.watchId === watchId) {
 					return item;
 				}
 			}
 			return Promise.reject();
 		}
 		async findMylistItemByWatchId(watchId, groupId) {
-			const items = await this._getMylistItemsFromWapi(groupId).catch(() => []);
-			for (let i = 0, len = items.length; i < len; i++) {
-				let item = items[i], wid = item.id || item.item_data.watch_id;
-				if (wid === watchId) {
+			const items = await this._getMylistItems(groupId).catch(() => []);
+			for (let item of items) {
+				if (item.watchId === watchId) {
 					return item;
 				}
 			}
 			return Promise.reject();
 		}
-		async _getMylistItemsFromWapi(groupId) {
-			const url = `https://www.nicovideo.jp/api/mylist/list?group_id=${groupId}`;
-			const result = await netUtil.fetch(url, {credentials: 'include'})
-				.then(r => r.json())
-				.catch(e => { throw new Error('マイリスト取得失敗(2)', e); });
-			if (!result || result.status !== 'ok' && !result.mylistitem) {
-				window.console.info('getMylistItems fail', result);
-				throw new Error('マイリスト取得失敗(1)', result);
-			}
-			return result.mylistitem;
-		}
-		async removeDeflistItem(watchId) {
+		async removeDeflistItem(watchId, { frontendId = 6, frontendVersion = 0 } = {}) {
 			const item = await this.findDeflistItemByWatchId(watchId).catch(result => {
 				throw new Error('動画が見つかりません', {result, status: 'fail'});
 			});
-			await this._getCsrfToken().catch(result => {
-					throw new Error('トークンの取得に失敗しました', {result, status: 'fail'});
-			});
-			const url = 'https://www.nicovideo.jp/api/deflist/delete';
-			const body = `id_list[0][]=${item.watchId}&token=${token}`;
+			const body = `itemIds=${item.itemId}`;
+			const url = 'https://nvapi.nicovideo.jp/v1/users/me/watch-later?' + body;
 			const cacheKey = 'deflistItems';
-			const req = {
-				method: 'POST',
-				body,
-				headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+			const result = await netUtil.fetch(url, {
+				method: 'DELETE',
+				headers: {
+					'X-Frontend-Id': frontendId,
+					'X-Frontend-Version': frontendVersion,
+					'X-Request-With': 'https://www.nicovideo.jp'
+				},
 				credentials: 'include'
-			};
-			const result = await netUtil.fetch(url, req)
-				.then(r => r.json()).catch(e => e || {});
-			if (result && result.status && result.status === 'ok' ) {
+			}).then(r => r.json())
+				.catch(result => {
+					throw new Error('とりあえずマイリストから削除失敗(2)', { result, status: 'fail' });
+				});
+			if (result.meta.status && result.meta.status === 200) {
 				cacheStorage.removeItem(cacheKey);
 				emitter.emitAsync('deflistRemove', watchId);
 				return {
 					status: 'ok',
-					result: result,
+					result,
 					message: 'とりあえずマイリストから削除'
 				};
 			}
-				throw new Error(result.error.description, {
+			throw new Error(result.error.description, {
 					status: 'fail', result, code: result.error.code
-				});
+			});
 		}
-		async removeMylistItem(watchId, groupId) {
-			await this._getCsrfToken().catch(result => {
-					throw new Error('トークンの取得に失敗しました', {result, status: 'fail'});
-				});
+		async removeMylistItem(watchId, groupId, { frontendId = 6, frontendVersion = 0 } = {}) {
 			const item = await this.findMylistItemByWatchId(watchId, groupId).catch(result => {
 					throw new Error('動画が見つかりません', {result, status: 'fail'});
 				});
-			const url = 'https://www.nicovideo.jp/api/mylist/delete';
-			window.console.log('delete item:', item);
-			const body = 'id_list[0][]=' + item.item_id + '&token=' + token + '&group_id=' + groupId;
+			let body = 'itemIds=' + watchId;
+			const url = 'https://nvapi.nicovideo.jp/v1/users/me/mylists/' + groupId + '/items?' + body;
 			const cacheKey = `mylistItems: ${groupId}`;
 			const result = await netUtil.fetch(url, {
-				method: 'POST',
-				body,
-				headers: { 'Content-Type': 'application/x-www-form-urlencoded'},
+				method: 'DELETE',
+				headers: {
+					'X-Frontend-Id': frontendId,
+					'X-Frontend-Version': frontendVersion,
+					'X-Request-With': 'https://www.nicovideo.jp'
+				},
 				credentials: 'include'
 			}).then(r => r.json())
 				.catch(result => {
 					throw new Error('マイリストから削除失敗(2)', {result, status: 'fail'});
 				});
-			if (result.status && result.status === 'ok') {
+			if (result.meta.status && result.meta.status === 200) {
 				cacheStorage.removeItem(cacheKey);
 				emitter.emitAsync('mylistRemove', watchId, groupId);
 				return {
@@ -6994,7 +7238,7 @@ const MylistApiLoader = (() => {
 				code: result.error.code
 			});
 		}
-		async _addDeflistItem(watchId, description, isRetry, { frontendId = 6, frontendVersion = 0 } = {}) {
+		async addDeflistItem(watchId, description, isRetry = false, { frontendId = 6, frontendVersion = 0 } = {}) {
 			let url = 'https://nvapi.nicovideo.jp/v1/users/me/watch-later';
 			let body = `watchId=${watchId}&memo=`;
 			if (description) {
@@ -7021,7 +7265,8 @@ const MylistApiLoader = (() => {
 					result,
 					message: 'とりあえずマイリスト登録'
 				};
-			}else if(result.meta.status && result.meta.status === 409){
+			}
+			if (result.meta.status && result.meta.status === 409 && !isRetry) {
 					await this.removeDeflistItem(watchId).catch(err => {
 							throw new Error('とりあえずマイリスト登録失敗(101)', {
 								status: 'fail',
@@ -7029,7 +7274,7 @@ const MylistApiLoader = (() => {
 								code: err.code
 							});
 						});
-					const added = await this._addDeflistItem(watchId, description, true);
+					const added = await this.addDeflistItem(watchId, description, true, {frontendId, frontendVersion});
 					return {
 						status: 'ok',
 						result: added,
@@ -7042,32 +7287,12 @@ const MylistApiLoader = (() => {
 					result,
 				});
 			}
-			if (result.error.code !== 'EXIST' || isRetry) {
 				throw new Error(result.error.description, {
 					status: 'fail',
 					result,
 					code: result.error.code,
 					message: result.error.description
 				});
-			}
-/*
-			await self.removeDeflistItem(watchId).catch(err => {
-					throw new Error('とりあえずマイリスト登録失敗(101)', {
-						status: 'fail',
-						result: err.result,
-						code: err.code
-					});
-				});
-			const added = await self._addDeflistItem(watchId, description, true);
-			return {
-				status: 'ok',
-				result: added,
-				message: 'とりあえずマイリストの先頭に移動'
-			};
-*/
-		}
-		addDeflistItem(watchId, description, frontendId, frontendVersion) {
-			return this._addDeflistItem(watchId, description, false,frontendId, frontendVersion);
 		}
 		async addMylistItem(watchId, groupId, description, { frontendId = 6, frontendVersion = 0 } = {}) {
 			let body = 'itemId=' + watchId + '&description=';//+ '&token=' + token + '&group_id=' + groupId;
@@ -7172,36 +7397,11 @@ const IchibaLoader = {
 };
 const CommonsTreeLoader = {
 	load: contentId => {
-		const api = 'https://api.commons.nicovideo.jp/tree/summary/get';
+		const api = 'https://api.commons.nicovideo.jp/works/summary/get';
 		const url = `${api}?id=${contentId}&limit=200`;
 		return netUtil.jsonp(url);
 	}
 };
-const UploadedVideoApiLoader = (() => {
-	let loader = null;
-	class UploadedVideoApiLoader {
-		async load(userId) {
-			const url = `https://flapi.nicovideo.jp/api/watch/uploadedvideo?user_id=${userId}`;
-			const result = await netUtil.fetch(url, {credentials: 'include'})
-				.then(r => r.json())
-				.catch(e => { throw new Error('動画一覧の取得失敗(2)', e); });
-			if (result.status !== 'ok' || !result.list) {
-				throw new Error(`動画一覧の取得失敗(1) ${result && result.message}`, result);
-			}
-			return result.list;
-		}
-	}
-	return {
-		load: userId => {
-			loader = loader || new UploadedVideoApiLoader();
-			return loader.load(userId);
-		},
-		getUploadedVideos: userId => {
-			loader = loader || new UploadedVideoApiLoader();
-			return loader.load(userId);
-		}
-	};
-})();
 const UaaLoader = {
 	load: (videoId, {limit = 50} = {}) => {
 		const url = `https://api.nicoad.nicovideo.jp/v1/contents/video/${videoId}/thanks?limit=${limit}`;
@@ -7399,7 +7599,18 @@ class CrossDomainGate extends Emitter {
 	_fetch(url, options) {
 		return this._postMessage({command: 'fetch', params: {url, options}});
 	}
-	async fetch(url, options = {}) {
+	async fetch(resource, options = {}) {
+		let url = resource;
+		if (resource instanceof URL) {
+			url = resource.toString();
+		} else if (resource instanceof Request) {
+			url = resource.url;
+			options.method ??= resource.method;
+			options.headers ??= resource.headers;
+			options.body ??= resource.body;
+			options.credentials ??= resource.credentials;
+			options.signal ??= resource.signal;
+		}
 		const result = await this._fetch(url, options);
 		if (typeof result === 'string' || !result.buffer || !result.init || !result.headers) {
 			return result;
@@ -7525,8 +7736,58 @@ const NicoVideoApi = (() => {
 		bridgeDb(...args)    { return init().bridgeDb(...args); }
 	};
 })();
-class DmcInfo {
+class JSONable {
+	toJSON() {
+		const data = Object.create(null);
+		const proto = Object.getPrototypeOf(this);
+		for (const prop of Object.getOwnPropertyNames(proto)) {
+			const desc = Object.getOwnPropertyDescriptor(proto, prop);
+			if (typeof desc?.get !== 'function') continue;
+			const value = data[prop] = this[prop];
+			if (value == null || typeof value.toJSON !== 'function') continue;
+			data[prop] = value.toJSON();
+		}
+		return data;
+	}
+}
+class DomandInfo extends JSONable {
+	constructor(rawData, videoDetail, linkedChannelVideo) {
+		super();
+		this._rawData = rawData;
+		this._videoDetail = videoDetail;
+		this._linkedChannelVideo = linkedChannelVideo;
+	}
+	get videoId() {
+		return this._linkedChannelVideo != null ? this._linkedChannelVideo.linkedVideoId : this._videoDetail.id;
+	}
+	get accessRightKey() {
+		return this._rawData.accessRightKey || '';
+	}
+	get audios() {
+		return this._rawData.audios.toSorted((a, b) => b.qualityLevel > a.qualityLevel);
+	}
+	get availableAudios() {
+		return this.audios.filter(a => a.isAvailable);
+	}
+	get availableAudioIds() {
+		return this.availableAudios.map(a => a.id);
+	}
+	get videos() {
+		return this._rawData.videos.toSorted((a, b) => b.qualityLevel > a.qualityLevel);
+	}
+	get availableVideos() {
+		return this.videos.filter(v => v.isAvailable);
+	}
+	get availableVideoIds() {
+		return this.availableVideos.map(v => v.id);
+	}
+	get isStoryboardAvailable() {
+		return this._rawData.isStoryboardAvailable;
+	}
+}
+class DmcInfo extends JSONable {
 	constructor(rawData) {
+		super();
 		this._rawData = rawData;
 		this._session = rawData.movie.session;
 	}
@@ -7537,13 +7798,22 @@ class DmcInfo {
 		return this._session.urls;
 	}
 	get audios() {
-		return this._session.audios;
+		return this._rawData.movie.audios.toSorted((a, b) => b.metadata.levelIndex > a.metadata.levelIndex);
+	}
+	get availableAudios() {
+		return this.audios.filter(a => a.isAvailable);
+	}
+	get availableAudioIds() {
+		return this.availableAudios.map(a => a.id);
 	}
 	get videos() {
-		return this._rawData.movie.videos;
+		return this._rawData.movie.videos.toSorted((a, b) => b.metadata.levelIndex > a.metadata.levelIndex);
 	}
-	get quality() {
-		return this._rawData.movie.quality;
+	get availableVideos() {
+		return this.videos.filter(v => v.isAvailable);
+	}
+	get availableVideoIds() {
+		return this.availableVideos.map(v => v.id);
 	}
 	get signature() {
 		return this._session.signature;
@@ -7562,9 +7832,6 @@ class DmcInfo {
 	}
 	get recipeId() {
 		return this._session.recipeId;
-	}
-	get heartBeatLifeTimeMs() {
-		return this._session.heartbeatLifetime;
 	}
 	get protocols() {
 		return this._session.protocols || [];
@@ -7585,16 +7852,19 @@ class DmcInfo {
 		return (this.videos || []).concat();
 	}
 	get hasStoryboard() {
-		return !!this._rawData.storyboard_session_api;
+		return !!this._rawData.storyboard;
 	}
 	get storyboardInfo() {
-		return this._rawData.storyboard_session_api;
+		return this.hasStoryboard ? this._rawData.storyboard.session : null;
 	}
 	get transferPreset() {
 		return (this._session.transferPresets || [''])[0] || '';
 	}
-	get heartbeatLifeTime() {
+	get heartbeatLifetime() {
 		return this._session.heartbeatLifetime || 120 * 1000;
+	}
+	get contentKeyTimeout() {
+		return this._session.contentKeyTimeout || 600 * 1000;
 	}
 	get importVersion() {
 		return this._rawData.import_version || 0;
@@ -7604,17 +7874,6 @@ class DmcInfo {
 	}
 	get encryption() {
 		return this._rawData.encryption || null;
-	}
-	getData() {
-		const data = {};
-		for (const prop of Object.getOwnPropertyNames(this.constructor.prototype)) {
-			if (typeof this[prop] === 'function') { continue; }
-			data[prop] = this[prop];
-		}
-		return data;
-	}
-	toJSON() {
-		return JSON.stringify(this.getData());
 	}
 }
 class VideoFilter {
@@ -7646,7 +7905,6 @@ class VideoFilter {
 	}
 	isNgVideo(videoInfo) {
 		let isNg = false;
-		let isChannel = videoInfo.isChannel;
 		let ngTag = this.ngTag;
 		videoInfo.tagList.forEach(tag => {
 			let text = (tag.name || '').toLowerCase();
@@ -7665,8 +7923,9 @@ class VideoFilter {
 		return isNg;
 	}
 }
-class VideoInfoModel {
+class VideoInfoModel extends JSONable {
 	constructor(videoInfoData, localCacheData = {}) {
+		super();
 		this._update(videoInfoData, localCacheData);
 		this._currentVideoPromise = null;
 	}
@@ -7679,11 +7938,11 @@ class VideoInfoModel {
 		this._cacheData = localCacheData;
 		this._watchApiData = info.watchApiData;
 		this._videoDetail = info.watchApiData.videoDetail;
-		this._flashvars = info.watchApiData.flashvars;   // flashに渡す情報
 		this._viewerInfo = info.viewerInfo;               // 閲覧者(＝おまいら)の情報
-		this._flvInfo = info.flvInfo;
+		this._ngFilters = info.ngFilters;
 		this._msgInfo = info.msgInfo;
 		this._dmcInfo = (info.dmcInfo && info.dmcInfo.movie.session) ? new DmcInfo(info.dmcInfo) : null;
+		this._domandInfo = info.domandInfo ? new DomandInfo(info.domandInfo, info.watchApiData.videoDetail, info.linkedChannelVideo) : null;
 		this._relatedVideo = info.playlist; // playlistという名前だが実質は関連動画
 		this._playlistToken = info.playlistToken;
 		this._watchAuthKey = info.watchAuthKey;
@@ -7714,16 +7973,6 @@ class VideoInfoModel {
 	get largeThumbnnail() {
 		return this._videoDetail.largeThumbnnail;
 	}
-	get videoUrl() {
-		return (this._flvInfo.url || '');//.replace(/^http:/, '');
-	}
-	get storyboardUrl() {
-		let url = this._flvInfo.url;
-		if (!url || !url.match(/smile\?m=/) || url.match(/^rtmp/)) {
-			return null;
-		}
-		return url;
-	}
 	getCurrentVideo() {
 		if (this._currentVideoPromise) {
 			return this._currentVideoPromise;
@@ -7734,11 +7983,11 @@ class VideoInfoModel {
 		this._currentVideo = v;
 		this._currentVideoPromise && this._currentVideoPromise.resolve(v);
 	}
-	get isEconomy() {
-		return this.videoUrl.match(/low$/) ? true : false;
-	}
 	get tagList() {
 		return this._videoDetail.tagList;
+	}
+	get tagEdit() {
+		return this._videoDetail.tagEdit;
 	}
 	getVideoId() { // sm12345
 		return this.videoId;
@@ -7785,16 +8034,13 @@ class VideoInfoModel {
 		};
 	}
 	get isChannel() {
-		return !!this._videoDetail.channelId;
+		return this.owner.type === "channel";
 	}
 	get isMymemory() {
 		return !!this._videoDetail.isMymemory;
 	}
 	get isCommunityVideo() {
 		return !!(!this.isChannel && this._videoDetail.communityId);
-	}
-	get isPremiumOnly() {
-		return !!this._videoDetail.isPremiumOnly;
 	}
 	get isLiked() {
 		return !!this._videoDetail.isLiked;
@@ -7805,11 +8051,24 @@ class VideoInfoModel {
 	get hasParentVideo() {
 		return !!(this._videoDetail.commons_tree_exists);
 	}
-	get isDmc() {
-		return this.isDmcOnly || (this._rawData.isDmc);
+	get isHLSRequired() {
+		if (this.isDmcAvailable) {
+			return this.dmcInfo.isHLSRequired
+		} else {
+			return this.isDomandAvailable;
+		}
+	}
+	get actionTrackId() {
+		return this._watchApiData.clientTrackId;
+	}
+	get isDomandAvailable() {
+		return this._rawData.isDomand;
 	}
 	get isDmcAvailable() {
 		return this._rawData.isDmc;
+	}
+	get domandInfo() {
+		return this._domandInfo;
 	}
 	get dmcInfo() {
 		return this._dmcInfo;
@@ -7817,43 +8076,50 @@ class VideoInfoModel {
 	get msgInfo() {
 		return this._msgInfo;
 	}
+	get isDomandOnly() {
+		return this.isDomandAvailable && !this.isDmcAvailable;
+	}
 	get isDmcOnly() {
-		return !!this._rawData.isDmcOnly || !this.videoUrl;
+		return this.isDmcAvailable && !this.isDomandAvailable;
+	}
+	get hasDomandStoryboard() {
+		return this._domandInfo?.isStoryboardAvailable ?? false;
 	}
 	get hasDmcStoryboard() {
-		return this._dmcInfo && this._dmcInfo.hasStoryboard;
+		return this._dmcInfo?.hasStoryboard ?? false;
 	}
 	get dmcStoryboardInfo() {
-		return !!this._dmcInfo ? this._dmcInfo.storyboardInfo : null;
+		return this.hasDmcStoryboard ? this._dmcInfo.storyboardInfo : null;
+	}
+	get hasStoryboard() {
+		return this.hasDomandStoryboard || this.hasDmcStoryboard;
 	}
 	get owner() {
-		let ownerInfo;
-		if (this.isChannel) {
-			let c = this._watchApiData.channelInfo || {};
-			ownerInfo = {
-				icon: c.icon_url || 'https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/defaults/blank.jpg',
-				url: `https://ch.nicovideo.jp/ch${c.id}`,
-				id: c.id,
-				linkId: c.id ? `ch${c.id}` : '',
-				name: c.name,
-				favorite: c.is_favorited === 1, // こっちは01で
-				type: 'channel'
+		const {
+			iconUrl: icon = 'https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/defaults/blank.jpg',
+			id,
+			type,
+			name,
+		} = {...this._watchApiData.ownerInfo};
+		if (type === 'channel') {
+			return {
+				type,
+				url: `https://ch.nicovideo.jp/${id}`,
+				icon,
+				id,
+				linkId: id,
+				name,
 			};
 		} else {
-			let u = this._watchApiData.uploaderInfo || {};
-			let f = this._flashvars || {};
-			ownerInfo = {
-				icon: u.icon_url || 'https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/defaults/blank.jpg',
-				url: u.id ? `//www.nicovideo.jp/user/${u.id}` : '#',
-				id: u.id || f.videoUserId || '',
-				linkId: u.id ? `user/${u.id}` : '',
-				name: u.nickname || '(非公開ユーザー)',
-				favorite: !!u.is_favorited, // こっちはbooleanという
-				type: 'user',
-				isMyVideoPublic: !!u.is_user_myvideo_public
+			return {
+				type: type ?? 'user',
+				url: id ? `https://www.nicovideo.jp/user/${id}` : '#',
+				icon,
+				id,
+				linkId: `user/${id}`,
+				name: name ?? '(非公開ユーザー)',
 			};
 		}
-		return ownerInfo;
 	}
 	get series() {
 		if (!this._rawData.series || !this._rawData.series.id) {
@@ -7876,12 +8142,12 @@ class VideoInfoModel {
 		return this._relatedVideo.playlist || [];
 	}
 	get replacementWords() {
-		if (!this._flvInfo.ng_up || this._flvInfo.ng_up === '') {
-			return null;
-		}
-		return textUtil.parseQuery(
-			this._flvInfo.ng_up || ''
-		);
+		return this._ngFilters.reduce((acc, ng) => {
+			if (ng.source != null && ng.destination != null) {
+				acc[ng.source] = ng.destination;
+			}
+			return acc;
+		}, Object.create({}))
 	}
 	get playlistToken() {
 		return this._playlistToken;
@@ -7905,7 +8171,7 @@ class VideoInfoModel {
 		return parseInt(this._videoDetail.height, 10);
 	}
 	get initialPlaybackTime() {
-		return this.resumePoints[0] && (this.resumePoints[0].time || 0);
+	return this.resumePoints[0]?.time ?? 0;
 	}
 	get resumePoints() {
 		const duration = this.duration;
@@ -7913,8 +8179,7 @@ class VideoInfoModel {
 		const resumePoints =
 			((this._cacheData && this._cacheData.resume) ? this._cacheData.resume : [])
 				.filter(({now, time}) => time > MARGIN && time < duration - MARGIN)
-				.map(({now, time}) => { return {now: new Date().toLocaleString(), time}; })
-				.reverse();
+				.map(({now, time}) => { return {now: new Date(now).toLocaleString(), time}; });
 		const lastResumePoint = this._resumeInfo ? this._resumeInfo.initialPlaybackPosition : 0;
 		lastResumePoint && resumePoints.unshift({now: '前回', time: lastResumePoint});
 		return resumePoints;
@@ -7923,18 +8188,8 @@ class VideoInfoModel {
 		return this._rawData.csrfToken || '';
 	}
 	get extension() {
-		if (this.isDmc) {
+		if (this.isDomandAvailable || this.isDmcAvailable) {
 			return 'mp4';
-		}
-		const url = this.videoUrl;
-		if (url.match(/smile\?m=/)) {
-			return 'mp4';
-		}
-		if (url.match(/smile\?v=/)) {
-			return 'flv';
-		}
-		if (url.match(/smile\?s=/)) {
-			return 'swf';
 		}
 		return 'unknown';
 	}
@@ -7942,59 +8197,35 @@ class VideoInfoModel {
 		return this._rawData.community || null;
 	}
 	get maybeBetterQualityServerType() {
+		if (this.isDomandOnly) {
+			return 'domand';
+		}
 		if (this.isDmcOnly) {
 			return 'dmc';
 		}
-		if (this.isEconomy) {
+		if (!this.isDmcAvailable) {
+			return 'domand';
+		}
+		if (!this.isDomandAvailable) {
 			return 'dmc';
 		}
-		let dmcInfo = this.dmcInfo;
-		if (!dmcInfo) {
-			return 'smile';
-		}
-		if (/smile\?[sv]=/.test(this.videoUrl)) {
-			return 'dmc';
-		}
-		let smileWidth = this.width;
-		let smileHeight = this.height;
-		let dmcVideos = dmcInfo.videos;
-		let importVersion = dmcInfo.importVersion;
-		if (isNaN(smileWidth) || isNaN(smileHeight)) {
-			return 'dmc';
-		}
-		if (smileWidth > 1280 || smileHeight > 720) {
-			return 'smile';
-		}
-		if (smileHeight < 360) {
-			return 'smile';
-		}
-		const highestDmc = Math.max(...dmcVideos.map(v => {
-			return (/_([0-9]+)p$/.exec(v)[1] || '') * 1;
+		const highestDomand = Math.max(...this.domandInfo.videos.map(v => {
+			return v.height;
 		}));
-		if (highestDmc >= 720) {
-			return 'dmc';
-		}
-		if (smileHeight === 486 || smileHeight === 384) {
-			return 'smile';
-		}
-		if (highestDmc >= smileHeight) {
-			return 'dmc';
+		const highestDmc = Math.max(...this.dmcInfo.videos.map(v => {
+			return v.metadata.resolution.height;
+		}));
+		if (highestDomand >= highestDmc) {
+			return 'domand';
 		}
 		return 'dmc';
-	}
-	getData() {
-		const data = {};
-		for (const prop of Object.getOwnPropertyNames(this.constructor.prototype)) {
-			if (typeof this[prop] === 'function') { continue; }
-			data[prop] = this[prop];
-		}
-		return data;
 	}
 }
 const {NicoSearchApiV2Query, NicoSearchApiV2Loader} =
 	(function () {
-		const BASE_URL = 'https://api.search.nicovideo.jp/api/v2/';
+		const BASE_URL = 'https://api.search.nicovideo.jp/api/v2/snapshot';
 		const API_BASE_URL = `${BASE_URL}/video/contents/search`;
+		const VERSION_URL = `${BASE_URL}/version`
 		const MESSAGE_ORIGIN = 'https://api.search.nicovideo.jp/';
 		const SORT = {
 			f: 'startTime',
@@ -8003,9 +8234,7 @@ const {NicoSearchApiV2Query, NicoSearchApiV2Loader} =
 			m: 'mylistCounter',
 			l: 'lengthSeconds',
 			n: 'lastCommentTime',
-			h: '_hotMylistCounter',           // 人気が高い順
-			'_hot': '_hotMylistCounter',    // 人気が高い順(↑と同じだけど互換用に残ってる)
-			'_popular': '_popular',            // 並び順指定なしらしい
+			likeCount: 'likeCounter',
 		};
 		const F_RANGE = {
 			U_1H: 4,
@@ -8091,8 +8320,8 @@ const {NicoSearchApiV2Query, NicoSearchApiV2Loader} =
 				);
 				this._fields = [
 					'contentId', 'title', 'description', 'tags', 'categoryTags',
-					'viewCounter', 'commentCounter', 'mylistCounter', 'lengthSeconds',
-					'startTime', 'thumbnailUrl'
+					'viewCounter', 'commentCounter', 'mylistCounter', 'likeCounter',
+					'lengthSeconds', 'startTime', 'thumbnailUrl'
 				];
 				this._context = 'ZenzaWatch';
 				const n = new Date(), now = this.now;
@@ -8275,15 +8504,61 @@ const {NicoSearchApiV2Query, NicoSearchApiV2Loader} =
 		NicoSearchApiV2Query.SORT = SORT;
 		NicoSearchApiV2Query.F_RANGE = F_RANGE;
 		NicoSearchApiV2Query.L_RANGE = L_RANGE;
+		class NicoSearchApiV2Version {
+			constructor() {
+				this.date = this.lastUpdate = this._baseDate;
+			}
+			get isLatest() {
+				return (this.date - this._baseDate) > 0;
+			}
+			async update() {
+				const now = Date.now();
+				if (now - this.lastUpdate <= 1000 * 60 * 5) {
+					return this.date;
+				}
+				initializeCrossDomainGate();
+				const res =  await gate.fetch(VERSION_URL);
+				const body = await res.json();
+				this.date = new Date(body.last_modified);
+				this.lastUpdate = new Date(res.headers.get('Date') ?? now);
+				return this.date;
+			}
+			get _baseDate() {
+				let now = new Date();
+				return now.setUTCHours(now.getUTCHours() >= 20 ? 20 : -4, 0, 0);
+			}
+		}
 		class NicoSearchApiV2Loader {
+			static version = new NicoSearchApiV2Version;
+			static cacheStorage;
+			static CACHE_EXPIRE_TIME = 24 * 60 * 60 * 1000;
 			static async search(word, params) {
 				initializeCrossDomainGate();
 				const query = new NicoSearchApiV2Query(word, params);
 				const url = API_BASE_URL + '?' + query.toString();
+				const version = this.version.isLatest
+					? this.version.date.getTime()
+					: await this.version.update().then(date => date.getTime());
+				if (!this.cacheStorage) {
+					this.cacheStorage = new CacheStorage(sessionStorage);
+				}
+				const cacheKey = `search: ${[
+					`words:${query.q}`,
+					`targets:${query.targets.join(',')}`,
+					`sort:${query.sort}`,
+					`filters:${query.stringfiedFilters}`,
+					`offset:${query.offset}`,
+				].join(', ')}`;
+				const cacheData = this.cacheStorage.getItem(cacheKey);
+				if (cacheData && cacheData.version === version) {
+					return cacheData.data;
+				}
 				return gate.fetch(url).then(res => res.text()).then(result => {
 					result = NicoSearchApiV2Loader.parseResult(result);
 					if (typeof result !== 'number' && result.status === 'ok') {
-						return Promise.resolve(Object.assign(result, {word, params}));
+						let data = Object.assign(result, {word, params});
+						this.cacheStorage.setItem(cacheKey, {data, version}, this.CACHE_EXPIRE_TIME);
+						return Promise.resolve(data);
 					} else {
 						let description;
 						switch (result) {
@@ -8395,12 +8670,19 @@ const {NicoSearchApiV2Query, NicoSearchApiV2Loader} =
 		return {NicoSearchApiV2Query, NicoSearchApiV2Loader};
 	})();
 class TagEditApi {
-	load(videoId) {
-		const url = `https://nvapi.nicovideo.jp/v1/videos/${videoId}/tags?_language=ja-jp`;
+	load(videoId, editKey) {
+		const url = `https://nvapi.nicovideo.jp/v2/videos/${videoId}/tags`;
 		const options = {
 			method: 'GET',
 			credentials: 'include',
-				headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frontend-Id': 6, 'X-Frontend-Version': 0, 'X-Request-With': 'https://www.nicovideo.jp' }
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+					'X-Frontend-Id': 6,
+					'X-Frontend-Version': 0,
+					'X-Request-With': 'https://www.nicovideo.jp',
+					'X-Niconico-Language': 'ja-jp',
+					'X-Tag-Edit-Key': editKey,
+				}
 		};
 		return this._fetch(url, options).then(result => {
 			return result.data;
@@ -8408,9 +8690,9 @@ class TagEditApi {
 			throw new Error('タグ一覧の取得失敗', {result, status: 'fail'});
 		});
 	}
-	async add({videoId, tag, csrfToken, watchAuthKey, ownerLock = 0}) {
+	async add({videoId, tag, csrfToken, editKey, ownerLock = 0}) {
 		const encodedTag = encodeURIComponent(tag);
-		const url = `https://nvapi.nicovideo.jp/v1/videos/${videoId}/tags?_language=ja-jp&tag=${encodedTag}`;
+		const url = `https://nvapi.nicovideo.jp/v2/videos/${videoId}/tags?tag=${encodedTag}`;
 /*
 		const body = this._buildQuery({
 			cmd: 'add',
@@ -8425,7 +8707,14 @@ class TagEditApi {
 		const options = {
 			method: 'POST',
 			credentials: 'include',
-				headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frontend-Id': 6, 'X-Frontend-Version': 0, 'X-Request-With': 'https://www.nicovideo.jp' }
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+					'X-Frontend-Id': 6,
+					'X-Frontend-Version': 0,
+					'X-Request-With': 'https://www.nicovideo.jp',
+					'X-Niconico-Language': 'ja-jp',
+					'X-Tag-Edit-Key': editKey,
+				}
 		};
 		return await this._fetch(url, options).then(result => {
 			return result.data;
@@ -8433,9 +8722,9 @@ class TagEditApi {
 			throw new Error('タグの追加失敗', {result, status: 'fail'});
 		});
 	}
-	async remove({videoId, tag = '', id, csrfToken, watchAuthKey, ownerLock = 0}) {
+	async remove({videoId, tag = '', id, csrfToken, editKey, ownerLock = 0}) {
 		const encodedTag = encodeURIComponent(tag);
-		const url = `https://nvapi.nicovideo.jp/v1/videos/${videoId}/tags?_language=ja-jp&tag=${encodedTag}`;
+		const url = `https://nvapi.nicovideo.jp/v2/videos/${videoId}/tags?tag=${encodedTag}`;
 /*
 		const body = this._buildQuery({
 			cmd: 'remove',
@@ -8450,7 +8739,14 @@ class TagEditApi {
 		const options = {
 			method: 'DELETE',
 			credentials: 'include',
-				headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frontend-Id': 6, 'X-Frontend-Version': 0, 'X-Request-With': 'https://www.nicovideo.jp' }
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+					'X-Frontend-Id': 6,
+					'X-Frontend-Version': 0,
+					'X-Request-With': 'https://www.nicovideo.jp',
+					'X-Niconico-Language': 'ja-jp',
+					'X-Tag-Edit-Key': editKey,
+				}
 		};
 		return await this._fetch(url, options).then(result => {
 			return result.data;
@@ -8476,8 +8772,8 @@ class TagEditApi {
 Object.assign(ZenzaWatch.api, {
   VideoInfoLoader,
   ThumbInfoLoader,
+  PlaylistApiLoader,
   MylistApiLoader,
-  UploadedVideoApiLoader,
   CacheStorage,
   IchibaLoader,
   UaaLoader,
@@ -8490,8 +8786,8 @@ Object.assign(ZenzaWatch.api, {
   MatrixRankingLoader,
   NicoSearchApiV2Loader
 });
+ZenzaWatch.init.playlistApiLoader = PlaylistApiLoader;
 ZenzaWatch.init.mylistApiLoader = MylistApiLoader;
-ZenzaWatch.init.UploadedVideoApiLoader = UploadedVideoApiLoader;
 /*
 * アニメーション基準用の時間ゲッターとしてはperformance.now()よりWeb Animations APIのほうが優れている。
 */
@@ -8666,461 +8962,360 @@ MediaTimeline.get = name => MediaTimeline.register(name);
 WatchInfoCacheDb.api(NicoVideoApi);
 StoryboardCacheDb.api(NicoVideoApi);
 
-const SmileStoryboardInfoLoader = (()=> {
-	let parseStoryboard = ($storyboard, url) => {
-		let id = $storyboard.attr('id') || '1';
-		return {
-			id,
-			url: url.replace('sb=1', `sb=${id}`),
-			thumbnail: {
-				width: $storyboard.find('thumbnail_width').text(),
-				height: $storyboard.find('thumbnail_height').text(),
-				number: $storyboard.find('thumbnail_number').text(),
-				interval: $storyboard.find('thumbnail_interval').text()
-			},
-			board: {
-				rows: $storyboard.find('board_rows').text(),
-				cols: $storyboard.find('board_cols').text(),
-				number: $storyboard.find('board_number').text()
-			}
-		};
-	};
-	let parseXml = (xml, url) => {
-		let $xml = util.$.html(xml), $storyboard = $xml.find('storyboard');
-		if ($storyboard.length < 1) {
-			return null;
-		}
-		let info = {
-			format: 'smile',
-			status: 'ok',
-			message: '成功',
-			url,
-			movieId: $xml.find('movie').attr('id'),
-			duration: $xml.find('duration').text(),
-			storyboard: []
-		};
-		for (let i = 0, len = $storyboard.length; i < len; i++) {
-			let sbInfo = parseStoryboard(util.$($storyboard[i]), url);
-			info.storyboard.push(sbInfo);
-		}
-		info.storyboard.sort((a, b) => {
-			let idA = parseInt(a.id.substr(1), 10), idB = parseInt(b.id.substr(1), 10);
-			return (idA < idB) ? 1 : -1;
-		});
-		return info;
-	};
-	let load = videoFileUrl => {
-		let a = document.createElement('a');
-		a.href = videoFileUrl;
-		let server = a.host;
-		let search = a.search;
-		if (!/\?(.)=(\d+)\.(\d+)/.test(search)) {
-			return Promise.reject({status: 'fail', message: 'invalid url', url: videoFileUrl});
-		}
-		let fileType = RegExp.$1;
-		let fileId = RegExp.$2;
-		let key = RegExp.$3;
-		if (fileType !== 'm') {
-			return Promise.reject({status: 'fail', message: 'unknown file type', url: videoFileUrl});
-		}
-		return new Promise((resolve, reject) => {
-			let url = '//' + server + '/smile?m=' + fileId + '.' + key + '&sb=1';
-			util.fetch(url, {credentials: 'include'})
-				.then(res => res.text())
-				.then(result => {
-					const info = parseXml(result, url);
-					if (info) {
-						resolve(info);
-					} else {
-						reject({
-							status: 'fail',
-							message: 'storyboard not exist (1)',
-							result: result,
-							url: url
-						});
-					}
-				}).catch(err => {
-				reject({
-					status: 'fail',
-					message: 'storyboard not exist (2)',
-					result: err,
-					url: url
-				});
-			});
-		});
-	};
-	return {load};
-})();
 const StoryboardInfoLoader = {
-	load: videoInfo => {
-		if (!videoInfo.hasDmcStoryboard) {
-			const url = videoInfo.storyboardUrl;
-			return url ?
-				StoryboardInfoLoader.load(url) :
-				Promise.reject('smile storyboard api not exist');
+	load: (serverType, videoInfo) => {
+		if (serverType === 'domand' && videoInfo.hasDomandStoryboard) {
+			return VideoSessionWorker.storyboard({type: 'domand', info: videoInfo});
 		}
-		const watchId = videoInfo.watchId;
-		const info = videoInfo.dmcStoryboardInfo;
-		const duration = videoInfo.duration;
-		return VideoSessionWorker.storyboard(watchId, info, duration);
+		if (serverType === 'dmc' && videoInfo.hasDmcStoryboard) {
+			return VideoSessionWorker.storyboard({type: 'dmc', info: videoInfo});
+		}
+		return Promise.reject('smile storyboard api not exist');
 	}
 };
 // ZenzaWatch.api.DmcStoryboardInfoLoader = DmcStoryboardInfoLoader;
 ZenzaWatch.api.StoryboardInfoLoader = StoryboardInfoLoader;
 
 const {ThreadLoader} = (() => {
-	const VERSION_OLD = '20061206';
-	const VERSION     = '20090904';
 	const FRONT_ID = '6';
 	const FRONT_VER = '0';
-	const LANG_CODE = {
-		'en_us': 1,
-		'zh_tw': 2
-	};
+	const FORK_LABEL = {
+		0: 'main',
+		1: 'owner',
+		2: 'easy',
+		3: 'ai',
+	}
 	class ThreadLoader {
 		constructor() {
 			this._threadKeys = {};
 		}
-		getRequestCountByDuration(duration) {
-			if (duration < 60)  { return 100; }
-			if (duration < 240) { return 200; }
-			if (duration < 300) { return 400; }
-			return 1000;
-		}
-		getThreadKey(threadId, language = '', options = {}) {
-			let url = `//flapi.nicovideo.jp/api/getthreadkey?thread=${threadId}`;
-			let langCode = this.getLangCode(language);
-			if (langCode) { url = `${url}&language_id=${langCode}`; }
-			const headers = options.cookie ? {Cookie: options.cookie} : {};
-			return netUtil.fetch(url, {
-				method: 'POST',
-				dataType: 'text',
-				headers,
-				credentials: 'include'
-			}).then(res => res.text()).then(e => {
-				const result = textUtil.parseQuery(e);
-				this._threadKeys[threadId] = result;
-				return result;
-			}).catch(result => {
-				return Promise.reject({
-					result: result,
-					message: `ThreadKeyの取得失敗 ${threadId}`
-				});
-			});
-		}
-		getLangCode(language = '') {
-			language = language.replace('-', '_').toLowerCase();
-			if (LANG_CODE[language]) {
-				return LANG_CODE[language];
+		async getThreadKey(videoId, options = {}) {
+			let url = `https://nvapi.nicovideo.jp/v1/comment/keys/thread?videoId=${videoId}`;
+			console.log('getThreadKey url: ', url);
+			try {
+				const { meta, data } = await netUtil.fetch(url, {
+					headers: {
+						'X-Frontend-Id': FRONT_ID,
+						'X-Frontend-Version': FRONT_VER,
+					},
+					credentials: 'include'
+				}).then(res => res.json());
+				if (meta.status >= 300) {
+					throw meta
+				}
+				this._threadKeys[videoId] = data.threadKey;
+				return data
+			} catch (result) {
+				throw { result, message: `ThreadKeyの取得失敗 ${videoId}` }
 			}
-			return 0;
 		}
-		getPostKey(threadId, blockNo, options = {}) {
-			const url =
-				`//flapi.nicovideo.jp/api/getpostkey?device=1&thread=${threadId}&block_no=${blockNo}&version=1&version_sub=2&yugi=`;
-			console.log('getPostkey url: ', url);
-			const headers = options.cookie ? {Cookie: options.cookie} : {};
-			return netUtil.fetch(url, {
-				method: 'POST',
-				dataType: 'text',
-				headers,
-				credentials: 'include'
-			}).then(res => res.text()).then(e => textUtil.parseQuery(e)).catch(result => {
-				return Promise.reject({
-					result,
-					message: `PostKeyの取得失敗 ${threadId}`
-				});
-			});
-		}
-		buildPacketData(msgInfo, options = {}) {
-			const packets = [];
-			const resCount = this.getRequestCountByDuration(msgInfo.duration);
-			const leafContent = `0-${Math.floor(msgInfo.duration / 60) + 1}:100,${resCount},nicoru:100`;
-			const language = this.getLangCode(msgInfo.language);
-			msgInfo.threads.forEach(thread => {
-				if (!thread.isActive) { return; }
-				const t = {
-					thread: thread.id.toString(),
-					user_id: msgInfo.userId > 0 ? msgInfo.userId.toString() : '', // 0の時は空文字
-					language,
-					nicoru: 3,
-					scores: 1
-				};
-				if (thread.isThreadkeyRequired) {
-					t.threadkey = msgInfo.threadKey[thread.id].key;
-					t.force_184 = msgInfo.threadKey[thread.id].force184 ? '1' : '0';
+		async getPostKey(threadId, options = {}) {
+			const url = `https://nvapi.nicovideo.jp/v1/comment/keys/post?threadId=${threadId}`;
+			console.log('getPostKey url: ', url);
+			try {
+				const { meta, data } = await netUtil.fetch(url, {
+					headers: {
+						'X-Frontend-Id': FRONT_ID,
+						'X-Frontend-Version': FRONT_VER,
+					},
+					credentials: 'include'
+				}).then(res => res.json());
+				if (meta.status >= 300) {
+					throw meta
 				}
-				if (msgInfo.when > 0) {
-					t.when = msgInfo.when;
-				}
-				if (thread.fork) {
-					t.fork = thread.fork;
-				}
-				if (options.resFrom > 0) {
-					t.res_from = options.resFrom;
-				}
-				if (!t.threadkey /*&& !t.waybackkey*/ && msgInfo.userKey) {
-					t.userkey = msgInfo.userKey;
-				}
-				if (t.fork || thread.isLeafRequired === false) { // 投稿者コメントなど
-					packets.push({thread: Object.assign({with_global: 1, version: VERSION_OLD, res_from: -1000}, t)});
-				} else {
-					packets.push({thread: Object.assign({with_global: 1, version: VERSION}, t)});
-					packets.push({thread_leaves: Object.assign({content: leafContent}, t)});
-				}
-			});
-			return packets;
-		}
-		buildPacket(msgInfo, options = {}) {
-			const data = this.buildPacketData(msgInfo);
-			if (options.format !== 'xml') {
-				return JSON.stringify(data);
+				return data
+			} catch (result) {
+				throw { result, message: `PostKeyの取得失敗 ${threadId}` }
 			}
-			const packet = document.createElement('packet');
-			data.forEach(d => {
-				const t = document.createElement(d.thread ? 'thread' : 'thread_leaves');
-				const thread = d.thread ? d.thread : d.thread_leaves;
-				Object.keys(thread).forEach(attr => {
-					if (attr === 'content') {
-						t.textContent = thread[attr];
-						return;
-					}
-					t.setAttribute(attr, thread[attr]);
-				});
-				packet.append(t);
-			});
-			return packet.outerHTML;
 		}
-		_post(server, body, options = {}) {
-			const url = server;
-			return netUtil.fetch(url, {
-				method: 'POST',
-				dataType: 'text',
-				headers: {'Content-Type': 'text/plain; charset=UTF-8'},
-				body
-			}).then(res => {
-				if (options.format !== 'xml') {
-					return res.json();
+		async _delete(url, body, options = {}) {
+			try {
+				const { meta } = await netUtil.fetch(url, {
+					method: 'PUT',
+					headers: {
+						'X-Frontend-Id': FRONT_ID,
+						'X-Frontend-Version': FRONT_VER,
+						'Content-Type': 'text/plain; charset=UTF-8'
+					},
+					body
+				}).then(res => res.json());
+				if (meta.status >= 300) {
+					throw meta
 				}
-				return res.text().then(text => {
-					if (DOMParser) {
-						return new DOMParser().parseFromString(text, 'application/xml');
-					}
-					return (new JSDOM(text)).window.document;
-				});
-			}).catch(result => {
-				return Promise.reject({
+			} catch (result) {
+				throw {
 					result,
-					message: `コメントの通信失敗 server: ${server}`
-				});
-			});
+					message: `コメントの通信失敗`
+				}
+			}
 		}
-		_load(msgInfo, options = {}) {
-			let packet;
-			const language = msgInfo.language;
-			msgInfo.threadKey = msgInfo.threadKey || {};
-			const loadThreadKey = threadId => {
-				if (msgInfo.threadKey[threadId]) { return; }
-				msgInfo.threadKey[threadId] = {};
-				return this.getThreadKey(threadId, language, options).then(info => {
-					console.log('threadKey: ', threadId, info);
-					msgInfo.threadKey[threadId] = {key: info.threadkey, force184: info.force_184};
-				});
+		async _post(url, body, options = {}) {
+			try {
+				const { meta, data } = await netUtil.fetch(url, {
+					method: 'POST',
+					headers: {
+						'X-Frontend-Id': FRONT_ID,
+						'X-Frontend-Version': FRONT_VER,
+						'Content-Type': 'text/plain; charset=UTF-8'
+					},
+					body
+				}).then(res => res.json());
+				if (meta.status >= 300) {
+					throw meta
+				}
+				return data;
+			} catch (result) {
+				throw {
+					result,
+					message: `コメントの通信失敗`
+				}
+			}
+		}
+		async _load(msgInfo, options = {}) {
+			const {
+				params,
+				server,
+				threadKey
+			} = msgInfo.nvComment;
+			const packet = {
+				additionals: {},
+				params,
+				threadKey
 			};
-			const loadThreadKeys = () =>
-				Promise.all(msgInfo.threads.filter(t => t.isThreadkeyRequired).map(t => loadThreadKey(t.id)));
-			return Promise.all([loadThreadKeys()]).then(() => {
-				const format = options.format === 'xml' ? 'xml' : 'json';
-				let server = format === 'json' ? msgInfo.server.replace('/api/', '/api.json/') : msgInfo.server;
-				server = server.replace(/^http:/, '');
-				packet = this.buildPacket(msgInfo, format);
-				console.log('post packet...', server, packet);
-				return this._post(server, packet, format);
-			});
+			if (options.retrying) {
+				const info = await this.getThreadKey(msgInfo.videoId, options);
+				console.log('threadKey: ', msgInfo.videoId, info);
+				packet.threadKey = info.threadKey;
+			}
+			if (msgInfo.language !== params.language) {
+				packet.params.language = msgInfo.language;
+			}
+			if (msgInfo.when > 0) {
+				packet.additionals.when = msgInfo.when;
+			}
+			const url = new URL('/v1/threads', server);
+			console.log('load threads...', url, packet);
+			try {
+				const { meta, data } = await netUtil.fetch(url, {
+					method: 'POST',
+					headers: {
+						'X-Frontend-Id': FRONT_ID,
+						'X-Frontend-Version': FRONT_VER,
+						'Content-Type': 'text/plain; charset=UTF-8'
+					},
+					body: JSON.stringify(packet)
+				}).then(res => res.json());
+				if (meta.status >= 300) {
+					throw meta;
+				}
+				return data;
+			} catch (result) {
+				throw {
+					result,
+					message: `コメントの通信失敗`
+				}
+			}
 		}
-		load(msgInfo, options = {}) {
-			const server   = msgInfo.server;
-			const threadId = msgInfo.threadId;
-			const userId   = msgInfo.userId;
-			const timeKey = `loadComment server: ${server} thread: ${threadId}`;
+		async load(msgInfo, options = {}) {
+			const { videoId, userId } = msgInfo;
+			const timeKey = `loadComment videoId: ${videoId}`;
 			console.time(timeKey);
-			const onSuccess = result => {
-				console.timeEnd(timeKey);
-				debug.lastMessageServerResult = result;
-				const format = 'array';
-				let thread, totalResCount = 0;
-				let resultCode = null;
-				try {
-					let threads = result.filter(t => t.thread).map(t => t.thread);
-					let lastId = null;
-					Array.from(threads).forEach(t => {
-						let id = parseInt(t.thread, 10);
-						let fork = t.fork || 0;
-						if (lastId === id || fork) {
-							return;
-						}
-						lastId = id;
-						msgInfo[id] = thread;
-						if (parseInt(id, 10) === parseInt(threadId, 10)) {
-							thread = t;
-							resultCode = t.resultcode;
-						}
-						if (!isNaN(t.last_res) && !fork) { // 投稿者コメントはカウントしない
-							totalResCount += t.last_res;
-						}
-					});
-				} catch (e) {
-					console.error(e);
-				}
-				if (resultCode !== 0) {
-					console.log('comment fail:\n', result);
-					return Promise.reject({
-						message: `コメント取得失敗[${resultCode}]`
-					});
-				}
-				const last_res = isNaN(thread.last_res) ? 0 : thread.last_res * 1;
-				const threadInfo = {
-					server,
-					userId,
-					resultCode,
-					threadId,
-					thread:     thread.thread,
-					serverTime: thread.server_time,
-					force184:   msgInfo.defaultThread.isThreadkeyRequired ? '1' : '0',
-					lastRes:    last_res,
-					totalResCount,
-					blockNo:    Math.floor((last_res + 1) / 100),
-					ticket:     thread.ticket || '0',
-					revision:   thread.revision,
-					language:   msgInfo.language,
-					when:       msgInfo.when,
-					isWaybackMode: !!msgInfo.when
-				};
-				msgInfo.threadInfo = threadInfo;
-				console.log('threadInfo: ', threadInfo);
-				return Promise.resolve({resultCode, threadInfo, body: result, format});
-			};
-			const onFailFinally = e => {
-				console.timeEnd(timeKey);
-				window.console.error('loadComment fail finally: ', e);
-				return Promise.reject({
-					message: 'コメントサーバーの通信失敗: ' + server
-				});
-			};
-			const onFail1st = e => {
+			let result;
+			try {
+				result = await this._load(msgInfo, options);
+			} catch (e) {
 				console.timeEnd(timeKey);
 				window.console.error('loadComment fail 1st: ', e);
 				PopupMessage.alert('コメントの取得失敗: 3秒後にリトライ');
-				return sleep(3000).then(() => this._load(msgInfo, options).then(onSuccess).catch(onFailFinally));
-			};
-			return this._load(msgInfo, options).then(onSuccess).catch(onFail1st);
-		}
-		async _postChat(threadInfo, postkey, text, cmd, vpos) {
-			const packet = JSON.stringify([{chat: {
-				content: text,
-				mail: cmd || '',
-				vpos: vpos || 0,
-				premium: util.isPremium() ? 1 : 0,
-				postkey,
-				user_id: threadInfo.userId.toString(),
-				ticket: threadInfo.ticket,
-				thread: threadInfo.threadId.toString()
-			}}]);
-			console.log('post packet: ', packet);
-			const server = threadInfo.server.replace('/api/', '/api.json/');
-			const result = await this._post(server, packet, 'json');
-			let status = null, chat_result, no = 0, blockNo = 0;
-			try {
-				chat_result = result.find(t => t.chat_result).chat_result;
-				status = chat_result.status * 1;
-				no = parseInt(chat_result.no, 10);
-				blockNo = Math.floor((no + 1) / 100);
-			} catch (e) {
-				console.error(e);
+				await sleep(3000);
+				try {
+					console.time(timeKey);
+					result = await this._load(msgInfo, { retrying: true, ...options });
+				} catch (e) {
+					console.timeEnd(timeKey);
+					window.console.error('loadComment fail finally: ', e);
+					throw {
+						message: 'コメントサーバーの通信失敗'
+					}
+				}
 			}
-			if (status === 0) {
+			console.timeEnd(timeKey);
+			debug.lastMessageServerResult = result;
+			let totalResCount = result.globalComments.reduce((count, current) => (count + current.count), 0);
+			for (const thread of result.threads) {
+				const fork = thread.fork;
+				thread.info = msgInfo.threads.find(({id, forkLabel}) => `${id}` === thread.id && forkLabel === fork);
+				if (fork === 'easy') {
+					const resCount = thread.commentCount;
+					totalResCount -= resCount;
+				}
+			}
+			const threadInfo = {
+				userId,
+				videoId,
+				threadId: msgInfo.threadId,
+				is184Forced: msgInfo.defaultThread.is184Forced,
+				totalResCount,
+				language: msgInfo.language,
+				when: msgInfo.when,
+				isWaybackMode: !!msgInfo.when
+			};
+			msgInfo.threadInfo = threadInfo;
+			console.log('threadInfo: ', threadInfo);
+			return {threadInfo, body: result, format: 'threads'};
+		}
+		async postChat(msgInfo, text, cmd, vpos, retrying = false) {
+			const {
+				videoId,
+				threadId,
+				language
+			} = msgInfo.threadInfo;
+			const url = new URL(`/v1/threads/${threadId}/comments`, msgInfo.nvComment.server);
+			const { postKey } = await this.getPostKey(threadId, { language });
+			const packet = JSON.stringify({
+				body: text,
+				commands: cmd?.split(/[\x20\xA0\u3000\t\u2003\s]+/) ?? [],
+				vposMs: Math.floor((vpos || 0) * 10),
+				postKey,
+				videoId,
+			});
+			console.log('post packet: ', packet);
+			try {
+				const { no, id } = await this._post(url, packet);
 				return {
 					status: 'ok',
 					no,
-					blockNo,
-					code: status,
+					id,
 					message: 'コメント投稿成功'
 				};
+			} catch (error) {
+				const { result: { status: statusCode, errorCode } } = error;
+				if (statusCode == null) {
+					throw {
+						status: 'fail',
+						message: `コメント投稿失敗`
+					};
+				}
+				if (!retrying && ['INVALID_TOKEN', 'EXPIRED_TOKEN'].includes(errorCode)) {
+					await this.load(msgInfo);
+				} else {
+					throw {
+						status: 'fail',
+						statusCode,
+						message: errorCode ? `コメント投稿失敗 ${errorCode}` : 'コメント投稿失敗'
+					};
+				}
+				await sleep(3000);
+				return await this.postChat(msgInfo, text, cmd, vpos, true)
 			}
-			return Promise.reject({
-				status: 'fail',
-				no,
-				blockNo,
-				code: status,
-				message: `コメント投稿失敗 status: ${status} server: ${threadInfo.server}`
-			});
 		}
-		async postChat(msgInfo, text, cmd, vpos, lang) {
-			const threadInfo = msgInfo.threadInfo;
-			const tk = await this.getPostKey(threadInfo.threadId, threadInfo.blockNo, lang);
-			const postkey = tk.postkey;
-			let result = await this._postChat(threadInfo, postkey, text, cmd, vpos, lang).catch(r => r);
-			if (result.status === 'ok') {
-				return result;
+		async getDeleteKey(threadId, options = {}) {
+			const url = `https://nvapi.nicovideo.jp/v1/comment/keys/delete?threadId=${threadId}&fork=${options.fork || 'main'}`;
+			console.log('getNicoruKey url: ', url);
+			try {
+				const { meta, data } = await netUtil.fetch(url, {
+					headers: {
+						'X-Frontend-Id': FRONT_ID,
+						'X-Frontend-Version': FRONT_VER,
+						'X-Niconico-Language': options.language || 'ja-jp'
+					},
+					credentials: 'include'
+				}).then(res => res.json());
+				if (meta.status >= 300) {
+					throw meta
+				}
+				return data
+			} catch (result) {
+				throw { result, message: `DeleteKeyの取得失敗 ${threadId}` }
 			}
-			const errorCode = parseInt(result.code, 10);
-			if (errorCode === 3) { // ticket fail
-				await this.load(msgInfo);
-			} else if (![2, 4, 5].includes(errorCode)) { // リカバー不能系
-				return Promise.reject(result);
-			}
-			await sleep(3000);
-			result = await this._postChat(threadInfo, postkey, text, cmd, vpos, lang).catch(r => r);
-			return result.status === 'ok' ? result : Promise.reject(result);
 		}
-		getNicoruKey(threadId, langCode = 0, options = {}) {
-			const url =
-				`https://nvapi.nicovideo.jp/v1/nicorukey?language=${langCode}&threadId=${threadId}`;
-			console.log('getNicorukey url: ', url);
-			const headers = options.cookie ? {Cookie: options.cookie} : {};
-			Object.assign(headers, {
-				'X-Frontend-Id': FRONT_ID,
-				});
-			return netUtil.fetch(url, {
-				headers,
-				credentials: 'include'
-			}).then(res => res.json())
-				.then(js => {
-					if (js.meta.status === 200) {
-						return js.data;
-					}
-					return Promise.reject({status: js.meta.status});
-				}).catch(result => {
-				return Promise.reject({
-					result,
-					message: `NicoruKeyの取得失敗 ${threadId}`
-				});
+		async deleteChat(msgInfo, chat) {
+			const {
+				videoId,
+				threadId,
+				language
+			} = msgInfo.threadInfo;
+			const url = new URL(`/v1/threads/${threadId}/comment-comment-owner-deletions`, msgInfo.nvComment.server);
+			const fork = FORK_LABEL[chat.fork || 0];
+			const { deleteKey } = await this.getDeleteKey(threadId, { language, fork });
+			const packet = JSON.stringify({
+				deleteKey,
+				fork,
+				language,
+				targets: [{
+					no: chat.no,
+					operation: 'DELETE'
+				}],
+				videoId,
 			});
+			console.log('put packet: ', packet);
+			try {
+				await this._delete(url, packet);
+				return {
+					status: 'ok',
+					message: 'コメント削除成功'
+				};
+			} catch (error) {
+				const { result: { status: statusCode, errorCode } } = error;
+				throw {
+					status: 'fail',
+					statusCode,
+					message: errorCode ? `コメント削除失敗 ${errorCode}` : 'コメント削除失敗'
+				};
+			}
+		}
+		async getNicoruKey(threadId, options = {}) {
+			const url = `https://nvapi.nicovideo.jp/v1/comment/keys/nicoru?threadId=${threadId}`;
+			console.log('getNicoruKey url: ', url);
+			try {
+				const { meta, data } = await netUtil.fetch(url, {
+					headers: {
+						'X-Frontend-Id': FRONT_ID,
+						'X-Frontend-Version': FRONT_VER,
+						'X-Niconico-Language': options.language || 'ja-jp'
+					},
+					credentials: 'include'
+				}).then(res => res.json());
+				if (meta.status >= 300) {
+					throw meta
+				}
+				return data
+			} catch (result) {
+				throw { result, message: `NicoruKeyの取得失敗 ${threadId}` }
+			}
 		}
 		async nicoru(msgInfo, chat) {
-			const threadInfo = msgInfo.threadInfo;
-			const language = this.getLangCode(msgInfo.language);
-			const {nicorukey} = await this.getNicoruKey(chat.threadId, language);
-			const server = threadInfo.server.replace('/api/', '/api.json/');
-			const body = JSON.stringify({nicoru:{
+			const {
+				videoId,
+				threadId,
+				language
+			} = msgInfo.threadInfo;
+			const url = new URL(`/v1/threads/${threadId}/nicorus`, msgInfo.nvComment.server);
+			const { nicoruKey } = await this.getNicoruKey(threadId, { language });
+			const packet = JSON.stringify({
 				content: chat.text,
-				fork: chat.fork || 0,
-				id: chat.no.toString(),
-				language,
-				nicorukey,
-				postdate: `${chat.date}.${chat.dateUsec}`,
-				premium: nicoUtil.isPremium() ? 1 : 0,
-				thread: chat.threadId.toString(),
-				user_id: msgInfo.userId.toString()
-			}});
-			const result = await this._post(server, body);
-			const [{nicoru_result: {status}}] = result;
-			if (status === 4) {
-				return Promise.reject({status, message: 'ニコり済みだった'});
-			} else if (status !== 0) {
-				return Promise.reject({status, message: `ニコれなかった＞＜ (status:${status})`});
+				fork: FORK_LABEL[chat.fork || 0],
+				no: chat.no,
+				nicoruKey,
+				videoId,
+			});
+			console.log('post packet: ', packet);
+			try {
+				const { nicoruId, nicoruCount } = await this._post(url, packet);
+				return {
+					status: 'ok',
+					id: nicoruId,
+					count: nicoruCount,
+					message: 'ニコれた'
+				};
+			} catch (error) {
+				const { result: { status: statusCode, errorCode } } = error;
+				throw {
+					status: 'fail',
+					statusCode,
+					message: errorCode ? `ニコれなかった＞＜ ${errorCode}` : 'ニコれなかった＞＜'
+				};
 			}
-			return result;
 		}
 	}
 	return {ThreadLoader: new ThreadLoader};
@@ -9427,6 +9622,18 @@ class NicoVideoPlayer extends Emitter {
 				fork0: conf.props['filter.fork0'],
 				fork1: conf.props['filter.fork1'],
 				fork2: conf.props['filter.fork2'],
+				fork3: conf.props['filter.fork3'],
+				defaultThread: conf.props['filter.defaultThread'],
+				ownerThread: conf.props['filter.ownerThread'],
+				communityThread: conf.props['filter.communityThread'],
+				nicosThread: conf.props['filter.nicosThread'],
+				easyThread: conf.props['filter.easyThread'],
+				aiThread: conf.props['filter.aiThread'],
+				extraDefaultThread: conf.props['filter.extraDefaultThread'],
+				extraOwnerThread: conf.props['filter.extraOwnerThread'],
+				extraCommunityThread: conf.props['filter.extraCommunityThread'],
+				extraNicosThread: conf.props['filter.extraNicosThread'],
+				extraEasyThread: conf.props['filter.extraEasyThread'],
 				sharedNgLevel: conf.props.sharedNgLevel
 			},
 			showComment: conf.props.showComment,
@@ -9529,9 +9736,10 @@ class NicoVideoPlayer extends Emitter {
 	}
 	_onMouseWheel(e, delta) {
 		if (delta > 0) { // up
-			this.volumeUp();
-		} else {         // down
-			this.volumeDown();
+			return this.volumeUp();
+		}
+		if (delta < 0) { // down
+			return this.volumeDown();
 		}
 	}
 	volumeUp() {
@@ -9690,6 +9898,13 @@ class NicoVideoPlayer extends Emitter {
 		const nicoChat = this._commentPlayer.addChat(text, cmd, vpos, options);
 		console.log('addChat:', text, cmd, vpos, options, nicoChat);
 		return nicoChat;
+	}
+	removeChat(nicoChat) {
+		if (!this._commentPlayer) {
+			return;
+		}
+		this._commentPlayer.removeChat(nicoChat);
+		console.log('removeChat:', nicoChat);
 	}
 	get filter() {return this._commentPlayer.filter;}
 	get videoInfo() {return this._videoInfo;}
@@ -10231,6 +10446,9 @@ class VideoPlayer extends Emitter {
 		if (!this._canPlay) {
 			this._canPlay = true;
 			this.removeClass('is-loading');
+			if (Config.props.enableResume && this._video.currentTime == 0) {
+				this.emit('command', 'seekToResumePoint')
+			}
 			this.emit('canPlay', ...args);
 			if (this._video.videoHeight < 1) {
 				this._isAspectRatioFixed = false;
@@ -10357,10 +10575,11 @@ class VideoPlayer extends Emitter {
 		}
 		console.log('%c_onMouseWheel:', 'background: cyan;', e);
 		e.stopPropagation();
-		const delta = -parseInt(e.deltaY, 10);
-		if (delta !== 0) {
-			this.emit('mouseWheel', e, delta);
+		const delta = e.deltaY * -1;
+		if (Number.isNaN(delta)) {
+			return;
 		}
+		this.emit('mouseWheel', e, delta);
 	}
 	_onStalled(e) {
 		this.emit('stalled', e);
@@ -10829,21 +11048,20 @@ class StoryboardInfoModel extends Emitter {
 			format: 'dmc',
 			status: 'fail',
 			duration: 1,
-			storyboard: [{
-				id: 1,
-				urls: ['https://example.com'],
+			storyboard: {
+				version: "1",
 				thumbnail: {
 					width: 160,
 					height: 90,
-					number: 1,
-					interval: 1000
 				},
-				board: {
-					rows: 1,
-					cols: 1,
-					number: 1
-				}
-			}]
+				columns: 1,
+				rows: 1,
+				interval: 1000,
+				images: [{
+					timestamp: 0,
+					url: 'https://example.com'
+				}],
+			}
 		};
 	}
 	constructor(rawData) {
@@ -10856,7 +11074,7 @@ class StoryboardInfoModel extends Emitter {
 		} else {
 			this._rawData = rawData;
 		}
-		this.primary = this._rawData.storyboard[0];
+		this.primary = this._rawData.storyboard;
 		this.emit('update', this);
 		return this;
 	}
@@ -10873,28 +11091,49 @@ class StoryboardInfoModel extends Emitter {
 	get message() {return this._rawData.message;}
 	get duration() {return this._rawData.duration * 1;}
 	get isDmc() {return this._rawData.format === 'dmc';}
-	get url() {
-		return this.isDmc ? this.primary.urls[0] : this.primary.url;
-	}
-	get imageUrls() {
-		return [...Array(this.pageCount)].map((a, i) => this.getPageUrl(i));
+	get urls() { return this.primary.images.map(img => img.url); }
+	get images() {
+		return [...Array(this.pageCount)].map((a, i) => this.getPage(i));
 	}
 	get cellWidth() { return this.primary.thumbnail.width * 1; }
 	get cellHeight() { return this.primary.thumbnail.height * 1; }
-	get cellIntervalMs() { return this.primary.thumbnail.interval * 1; }
-	get cellCount() {
-		return Math.max(
-			Math.ceil(this.duration / Math.max(0.01, this.cellIntervalMs)),
-			this.primary.thumbnail.number * 1
-		);
-	}
-	get rows() { return this.primary.board.rows * 1; }
-	get cols() { return this.primary.board.cols * 1; }
-	get pageCount() { return this.primary.board.number * 1; }
+	get cellIntervalMs() { return this.primary.interval * 1; }
+	get cellCount() { return this.primary.count * 1; }
+	get rows() { return this.primary.rows * 1; }
+	get cols() { return this.primary.columns * 1; }
+	get pageCount() { return this.primary.images.length; }
 	get totalRows() { return Math.ceil(this.cellCount / this.cols); }
 	get pageWidth() { return this.cellWidth * this.cols; }
 	get pageHeight() { return this.cellHeight * this.rows; }
 	get countPerPage() { return this.rows * this.cols; }
+	getPage(page) {
+		const {url, buffer} = this.primary.images[page];
+		return buffer ?? url;
+	}
+	getIndex(ms) {
+		const v = Math.max(0, Math.min(this.duration, Math.floor(ms / 1000)));
+		const n = this.cellCount / Math.max(1, this.duration);
+		return Math.floor(v * n);
+	}
+	getPageIndex(thumbnailIndex) {
+		const perPage = this.countPerPage;
+		const pageIndex = Math.floor(thumbnailIndex / perPage);
+		return Math.max(0, Math.min(this.pageCount, pageIndex));
+	}
+	getThumbnailPosition(ms) {
+		const index = this.getIndex(ms);
+		const page = this.getPageIndex(index);
+		const mod = index % this.countPerPage;
+		const row = Math.floor(mod / Math.max(1, this.cols));
+		const col = mod % this.rows;
+		return {
+			page,
+			url: this.getPage(page),
+			index,
+			row,
+			col
+		};
+	}
 }
 class StoryboardView extends Emitter {
 	constructor(...args) {
@@ -11171,7 +11410,9 @@ class StoryboardView extends Emitter {
 		);
 	}
 	_updateFail() {
-		ClassList(this._view).remove('is-uccess').add('is-fail');
+		const cl = ClassList(this._view);
+		cl.remove('is-success');
+		cl.add('is-fail');
 	}
 	setCurrentTime(sec, forceUpdate) {
 		const model = this._model;
@@ -11529,106 +11770,6 @@ const StoryboardWorker = (() => {
 				}
 			}
 		};
-		class StoryboardInfoModel {
-			static get blankData() {
-				return {
-					format: 'dmc',
-					status: 'fail',
-					duration: 1,
-					storyboard: [{
-						id: 1,
-						urls: ['https://example.com'],
-						thumbnail: {
-							width: 160,
-							height: 90,
-							number: 1,
-							interval: 1000
-						},
-						board: {
-							rows: 1,
-							cols: 1,
-							number: 1
-						}
-					}]
-				};
-			}
-			constructor(rawData) {
-				this.update(rawData);
-			}
-			update(rawData) {
-				if (!rawData || rawData.status !== 'ok') {
-					this._rawData = this.constructor.blankData;
-				} else {
-					this._rawData = rawData;
-				}
-				this.primary = this._rawData.storyboard[0];
-				return this;
-			}
-			get rawData() {
-				return this._rawData || this.constructor.blankData;
-			}
-			get isAvailable() {return this._rawData.status === 'ok';}
-			get hasSubStoryboard() { return false; }
-			get status() {return this._rawData.status;}
-			get message() {return this._rawData.message;}
-			get duration() {return this._rawData.duration * 1;}
-			get isDmc() {return this._rawData.format === 'dmc';}
-			get url() {
-				return this.isDmc ? this.primary.urls[0] : this.primary.url;
-			}
-			get imageUrls() {
-				return [...Array(this.pageCount)].map((a, i) => this.getPageUrl(i));
-			}
-			get cellWidth() { return this.primary.thumbnail.width * 1; }
-			get cellHeight() { return this.primary.thumbnail.height * 1; }
-			get cellIntervalMs() { return this.primary.thumbnail.interval * 1; }
-			get cellCount() {
-				return Math.max(
-					Math.ceil(this.duration / Math.max(0.01, this.cellIntervalMs)),
-					this.primary.thumbnail.number * 1
-				);
-			}
-			get rows() { return this.primary.board.rows * 1; }
-			get cols() { return this.primary.board.cols * 1; }
-			get pageCount() { return this.primary.board.number * 1; }
-			get totalRows() { return Math.ceil(this.cellCount / this.cols); }
-			get pageWidth() { return this.cellWidth * this.cols; }
-			get pageHeight() { return this.cellHeight * this.rows; }
-			get countPerPage() { return this.rows * this.cols; }
-			getPageUrl(page) {
-				if (!this.isDmc) {
-					page = Math.max(0, Math.min(this.pageCount - 1, page));
-					return `${this.url}&board=${page + 1}`;
-				} else {
-					return this.primary.urls[page];
-				}
-			}
-			getIndex(ms) {
-				let v = Math.floor(ms / 1000);
-				v = Math.max(0, Math.min(this.duration, v));
-				const n = this.cellCount / Math.max(1, this.duration);
-				return parseInt(Math.floor(v * n), 10);
-			}
-			getPageIndex(thumbnailIndex) {
-				const perPage = this.countPerPage;
-				const pageIndex = parseInt(thumbnailIndex / perPage, 10);
-				return Math.max(0, Math.min(this.pageCount, pageIndex));
-			}
-			getThumbnailPosition(ms) {
-				const index = this.getIndex(ms);
-				const page = this.getPageIndex(index);
-				const mod = index % this.countPerPage;
-				const row = Math.floor(mod / Math.max(1, this.cols));
-				const col = mod % this.rows;
-				return {
-					page,
-					url: this.getPageUrl(page),
-					index,
-					row,
-					col
-				};
-			}
-		}
 		class BoardView {
 			constructor({canvas, info, name}) {
 				this.canvas = canvas;
@@ -11672,7 +11813,7 @@ const StoryboardWorker = (() => {
 				this.height = cellHeight;
 				this.totalWidth = Math.ceil(info.duration * 1000 / info.cellIntervalMs) * cellWidth;
 				this.boards.forEach(board => board.image && board.image.close && board.image.close());
-				this.boards = (await Promise.all(this._info.imageUrls.map(async (url, idx) => {
+				this.boards = (await Promise.all(info.images.map(async (url, idx) => {
 					const image = await this.images.get(url);
 					const boards = [];
 					for (let row = 0; row < rows; row++) {
@@ -11875,7 +12016,7 @@ const StoryboardWorker = (() => {
 			get info() { return this._info; }
 			set info(info) {
 				this.isReady = false;
-				this.info && this.info.imageUrls.forEach(url => this.images.release(url));
+				this.info && this.info.images.forEach(url => this.images.release(url));
 				this._info.update(info);
 				this._currentTime = -1;
 				this.cls();
@@ -11928,7 +12069,7 @@ const StoryboardWorker = (() => {
 				this.cls();
 			}
 			dispose() {
-				this.info && this.info.imageUrls.forEach(url => this.images.release(url));
+				this.info && this.info.images.forEach(url => this.images.release(url));
 				this.info = null;
 			}
 			sharedMemory() {}
@@ -12058,7 +12199,7 @@ const StoryboardWorker = (() => {
 				func(worker);
 			}
 		} else {
-			worker = worker || workerUtil.createCrossMessageWorker(func, {name: NAME});
+			worker = worker || workerUtil.createCrossMessageWorker(func, {name: NAME, inject: StoryboardInfoModel.toString()});
 		}
 		return worker;
 	};
@@ -12185,15 +12326,12 @@ class Storyboard extends Emitter {
 		this.emit('reset', this.model);
 	}
 	onVideoCanPlay(watchId, videoInfo) {
-		if (!nicoUtil.isPremium()) {
-			return;
-		}
-		if (!this.config.props.enableStoryboard) {
+		if (!this.config.props.enableStoryboard || !videoInfo.hasStoryboard || !nicoUtil.isPremium()) {
 			return;
 		}
 		this._watchId = watchId;
 		const resuestId = this._requestId =  Math.random();
-		StoryboardInfoLoader.load(videoInfo)
+		StoryboardInfoLoader.load(this.config.props.videoServerType, videoInfo)
 			.then(async (info) => {
 				await this.promise('dom-ready');
 				return info;
@@ -12416,27 +12554,28 @@ class Storyboard extends Emitter {
 			const config = this._playerConfig;
 			const $button = this._$videoServerTypeMenu;
 			const $select  = this._$videoServerTypeSelectMenu;
-			const $current = $select.find('.currentVideoQuality');
-			const updateSmileVideoQuality = value => {
-				const $dq = $select.find('.smileVideoQuality');
+			const updateDomandVideoQuality = value => {
+				const $dq = $select.find('.domandVideoQuality > li');
 				$dq.removeClass('selected');
-				$select.find('.select-smile-' + (value === 'eco' ? 'economy' : 'default')).addClass('selected');
+				$select.find('.select-domand-' + value).addClass('selected');
 			};
 			const updateDmcVideoQuality = value => {
-				const $dq = $select.find('.dmcVideoQuality');
+				const $dq = $select.find('.dmcVideoQuality > li');
 				$dq.removeClass('selected');
 				$select.find('.select-dmc-' + value).addClass('selected');
 			};
 			const onVideoServerType = (type, videoSessionInfo) => {
-				$button.raf.removeClass('is-smile-playing is-dmc-playing')
-					.raf.addClass(`is-${type === 'dmc' ? 'dmc' : 'smile'}-playing`);
+				$button.raf.removeClass('is-domand-playing is-dmc-playing')
+					.raf.addClass(`is-${type === 'dmc' ? 'dmc' : 'domand'}-playing`);
 				$select.find('.serverType').removeClass('selected');
-				$select.find(`.select-server-${type === 'dmc' ? 'dmc' : 'smile'}`).addClass('selected');
-				$current.raf.text(type !== 'dmc' ? '----' : videoSessionInfo.videoFormat.replace(/^.*h264_/, ''));
+				const $selectServer = $select.find(`.select-server-${type === 'dmc' ? 'dmc' : 'domand'}`);
+				$selectServer.addClass('selected');
+				$selectServer.find('.currentVideoQuality')
+					.raf.text(videoSessionInfo.video.label);
 			};
-			updateSmileVideoQuality(config.props.smileVideoQuality);
+			updateDomandVideoQuality(config.props.domandVideoQuality);
 			updateDmcVideoQuality(config.props.dmcVideoQuality);
-			config.onkey('forceEconomy',    updateSmileVideoQuality);
+			config.onkey('domandVideoQuality', updateDomandVideoQuality);
 			config.onkey('dmcVideoQuality', updateDmcVideoQuality);
 			this.player.on('videoServerType', onVideoServerType);
 		}
@@ -12626,11 +12765,11 @@ class Storyboard extends Emitter {
 				pointer.setAttribute('duration', videoInfo.duration);
 				pointer.setAttribute('time', resume.time);
 				pointer.setAttribute('text', `${resume.now} ここまで見た`);
-				if (i > 0) {
+				if (resume.now !== '前回') {
 					cssUtil.setProps(
 						[pointer, '--pointer-color', 'rgba(128, 128, 255, 0.6)'],
 						[pointer, '--color', '#aef']);
-				} else{
+				} else {
 					cssUtil.setProps([pointer, '--scale-pp', 1.7]);
 				}
 			}
@@ -12734,6 +12873,7 @@ util.addStyle(`
 	.videoControlBar * {
 		box-sizing: border-box;
 		user-select: none;
+		line-break: auto;
 	}
 	.videoControlBar.is-wheelSeeking {
 		pointer-events: none;
@@ -12816,7 +12956,7 @@ util.addStyle(`
 		opacity: 1;
 	}
 	.controlButton:active .controlButtonInner {
-		transform: translate(0, 2px);
+		transform: translate(0, 2px) scale(0.8);
 	}
 	.is-abort   .playControl,
 	.is-error   .playControl,
@@ -13184,23 +13324,11 @@ util.addStyle(`
 	.playbackRateSelectMenu li {
 		padding: 3px 4px;
 	}
-	.screenModeMenu {
-		width:  32px;
-		height: 32px;
-		line-height: 30px;
-		font-size: 20px;
-	}
-	.screenModeMenu:active {
-		font-size: 15px;
-	}
 	.screenModeMenu:focus-within {
 		background: #888;
 	}
 	.screenModeMenu:focus-within .tooltip {
 		display: none;
-	}
-	.screenModeMenu:active {
-		font-size: 10px;
 	}
 	.screenModeSelectMenu {
 		width: 148px;
@@ -13236,6 +13364,8 @@ util.addStyle(`
 	}
 	.fullscreenControlBarModeMenu {
 		display: none;
+		font-size: 16px;
+		white-space: nowrap;
 	}
 	.fullscreenControlBarModeMenu .controlButtonInner {
 		filter: grayscale(100%);
@@ -13323,10 +13453,7 @@ util.addStyle(`
 		transform: scale(0.75);
 	}
 	.videoServerTypeMenu {
-		bottom: 0;
 		min-width: 40px;
-		height:    32px;
-		line-height: 30px;
 		font-size: 16px;
 		white-space: nowrap;
 	}
@@ -13351,9 +13478,6 @@ util.addStyle(`
 	.is-youTube .videoServerTypeMenu.forYouTube {
 		display: inline-block;
 	}
-	.videoServerTypeMenu:active {
-		font-size: 13px;
-	}
 	.videoServerTypeMenu:focus-within {
 		background: #888;
 	}
@@ -13371,59 +13495,60 @@ util.addStyle(`
 		text-shadow: none !important;
 		cursor: default;
 	}
-	.videoServerTypeSelectMenu ul {
+	.videoServerTypeSelectMenu > ul {
 		margin: 2px 8px;
 	}
-	.videoServerTypeSelectMenu li {
-		padding: 3px 4px;
+	.videoServerTypeSelectMenu > ul > li.selected:hover {
+		background: none;
 	}
-	.videoServerTypeSelectMenu li.selected {
+	.videoServerTypeSelectMenu li:not(.selected) {
+		font-weight: initial;
+	}
+	.videoServerTypeSelectMenu li.selected > span {
 		pointer-events: none;
 		text-shadow: 0 0 4px #99f, 0 0 8px #99f !important;
 	}
-	.videoServerTypeSelectMenu .smileVideoQuality,
+	.videoServerTypeSelectMenu .domandVideoQuality,
 	.videoServerTypeSelectMenu .dmcVideoQuality {
 		font-size: 80%;
-		padding-left: 28px;
 	}
 	.videoServerTypeSelectMenu .currentVideoQuality {
 		color: #ccf;
 		font-size: 80%;
 		text-align: center;
 	}
-	.videoServerTypeSelectMenu .dmcVideoQuality.selected     span:before,
-	.videoServerTypeSelectMenu .smileVideoQuality.selected   span:before {
-		left: 22px;
-		font-size: 80%;
+	.videoServerTypeSelectMenu .domandVideoQuality > li,
+	.videoServerTypeSelectMenu .dmcVideoQuality > li {
+		margin-right: 0;
+		margin-left: 0;
+		padding-right: 12px;
+		padding-left: 12px;
 	}
-	.videoServerTypeSelectMenu .currentVideoQuality.selected   span:before {
-		display: none;
+	.videoServerTypeSelectMenu .domandVideoQuality > li > span,
+	.videoServerTypeSelectMenu .dmcVideoQuality > li > span {
+		margin-left: 12px;
 	}
-	/* dmcを使用不能の時はdmc選択とdmc画質選択を薄く */
-	.zenzaPlayerContainer:not(.is-dmcAvailable) .serverType.select-server-dmc,
-	.zenzaPlayerContainer:not(.is-dmcAvailable) .dmcVideoQuality,
-	.zenzaPlayerContainer:not(.is-dmcAvailable) .currentVideoQuality {
+	.videoServerTypeSelectMenu .domandVideoQuality > li.selected > span::before,
+	.videoServerTypeSelectMenu .dmcVideoQuality > li.selected > span::before {
+		left: 12px;
+	}
+	/* domandを使用不能の時はdomand画質選択を薄く */
+	.zenzaPlayerContainer:not(.is-domandAvailable) .serverType.select-server-domand {
 		opacity: 0.4;
 		pointer-events: none;
 		text-shadow: none !important;
 	}
-	.zenzaPlayerContainer:not(.is-dmcAvailable) .currentVideoQuality {
-		display: none;
-	}
-	.zenzaPlayerContainer:not(.is-dmcAvailable) .serverType.select-server-dmc span:before,
-	.zenzaPlayerContainer:not(.is-dmcAvailable) .dmcVideoQuality       span:before{
-		display: none !important;
-	}
-	.zenzaPlayerContainer:not(.is-dmcAvailable) .serverType {
+	/* dmcを使用不能の時はdmc画質選択を薄く */
+	.zenzaPlayerContainer:not(.is-dmcAvailable) .serverType.select-server-dmc {
+		opacity: 0.4;
 		pointer-events: none;
+		text-shadow: none !important;
 	}
-	/* dmcを使用している時はsmileの画質選択を薄く */
-	.is-dmc-playing .smileVideoQuality {
-		display: none;
-	}
-	/* dmcを選択していない状態ではdmcの画質選択を隠す */
-	.is-smile-playing .currentVideoQuality,
-	.is-smile-playing .dmcVideoQuality {
+	/* 選択していないシステムの画質選択を隠す */
+	.videoServerTypeMenu:not(.is-domand-playing) .domandVideoQuality,
+	.videoServerTypeMenu:not(.is-domand-playing) .serverType.select-server-domand .currentVideoQuality,
+	.videoServerTypeMenu:not(.is-dmc-playing) .dmcVideoQuality,
+	.videoServerTypeMenu:not(.is-dmc-playing) .serverType.select-server-dmc .currentVideoQuality {
 		display: none;
 	}
 	@media screen and (max-width: 768px) {
@@ -13519,10 +13644,6 @@ util.addStyle(`
 	}
 	.fullscreenControlBarModeSelectMenu li {
 		padding: 3px 4px;
-	}
-	.videoServerTypeSelectMenu li.selected {
-		pointer-events: none;
-		text-shadow: 0 0 4px #99f, 0 0 8px #99f !important;
 	}
 	.fullscreenControlBarModeMenu li:focus-within,
 	body[data-fullscreen-control-bar-mode="auto"] .fullscreenControlBarModeMenu [data-param="auto"],
@@ -13672,20 +13793,29 @@ util.addStyle(`
 							<div class="triangle"></div>
 							<p class="caption">動画サーバー・画質</p>
 							<ul>
-								<li class="serverType select-server-dmc" data-command="update-videoServerType" data-param="dmc">
+								<li class="serverType select-server-domand selected" data-command="update-videoServerType" data-param="domand">
 									<span>新システムを使用</span>
 									<p class="currentVideoQuality"></p>
+									<ul class="domandVideoQuality">
+										<li class="select-domand-auto"  data-command="update-domandVideoQuality" data-param="auto"><span>自動(auto)</span><//li>
+										<li class="select-domand-1080p" data-command="update-domandVideoQuality" data-param="1080p"><span>1080p 優先</span><//li>
+										<li class="select-domand-720p"  data-command="update-domandVideoQuality" data-param="720p"><span>720p</span><//li>
+										<li class="select-domand-480p"  data-command="update-domandVideoQuality" data-param="480p"><span>480p</span><//li>
+										<li class="select-domand-360p"  data-command="update-domandVideoQuality" data-param="360p"><span>360p</span><//li>
+										<li class="select-domand-144p"  data-command="update-domandVideoQuality" data-param="144p"><span>144p</span><//li>
+									</ul>
 								</li>
-								<li class="dmcVideoQuality selected select-dmc-auto" data-command="update-dmcVideoQuality" data-param="auto"><span>自動(auto)</span></li>
-								<li class="dmcVideoQuality selected select-dmc-veryhigh" data-command="update-dmcVideoQuality" data-param="veryhigh"><span>超(1080) 優先</span></li>
-								<li class="dmcVideoQuality selected select-dmc-high" data-command="update-dmcVideoQuality" data-param="high"><span>高(720) 優先</span></li>
-								<li class="dmcVideoQuality selected select-dmc-mid"  data-command="update-dmcVideoQuality" data-param="mid"><span>中(480-540)</span></li>
-								<li class="dmcVideoQuality selected select-dmc-low"  data-command="update-dmcVideoQuality" data-param="low"><span>低(360)</span></li>
-								<li class="serverType select-server-smile" data-command="update-videoServerType" data-param="smile">
+								<li class="serverType select-server-dmc" data-command="update-videoServerType" data-param="dmc">
 									<span>旧システムを使用</span>
+									<p class="currentVideoQuality"></p>
+									<ul class="dmcVideoQuality">
+										<li class="select-dmc-auto"     data-command="update-dmcVideoQuality" data-param="auto"><span>自動(auto)</span><//li>
+										<li class="select-dmc-veryhigh" data-command="update-dmcVideoQuality" data-param="veryhigh"><span>超(1080) 優先</span><//li>
+										<li class="select-dmc-high"     data-command="update-dmcVideoQuality" data-param="high"><span>高(720) 優先</span><//li>
+										<li class="select-dmc-mid"      data-command="update-dmcVideoQuality" data-param="mid"><span>中(480-540)</span><//li>
+										<li class="select-dmc-low"      data-command="update-dmcVideoQuality" data-param="low"><span>低(360)</span><//li>
+									</ul>
 								</li>
-								<li class="smileVideoQuality select-smile-default" data-command="update-forceEconomy" data-param="false" data-type="bool"><span>自動</span></li>
-								<li class="smileVideoQuality select-smile-economy" data-command="update-forceEconomy" data-param="true"  data-type="bool"><span>エコノミー固定</span></li>
 						</ul>
 						</div>
 					</div>
@@ -14389,7 +14519,7 @@ util.addStyle(`
 	.listContainer .nicoChat.fork1 .vposTime {
 		color: #6f6;
 	}
-	.listContainer .nicoChat.fork2 .vposTime {
+	.listContainer .nicoChat:where(.fork2, .fork3) .vposTime {
 		color: #66f;
 	}
 	.listContainer .nicoChat .no,
@@ -15437,8 +15567,13 @@ class NicoChat {
 		props.thread = data.thread * 1;
 		props.isPremium = data.premium ? '1' : '0';
 		props.isSubThread = (options.mainThreadId && props.thread !== options.mainThreadId);
-		props.layerId = typeof data.layerId === 'number' ?
-			data.layerId : (props.fork*1 % 2 /* fork2を0と同じレイヤーにするダメ対応. fork3とか4とか来たらまた考える */);
+		if (typeof data.layerId === 'number') {
+			props.layerId = data.layerId;
+		} else if (props.fork > 1) {
+			props.layerId = 0;
+		} else {
+			props.layerId = props.fork;
+		}
 		props.uniqNo =
 			(data.no                 %   10000) +
 			(data.fork               *  100000) +
@@ -15579,6 +15714,7 @@ class NicoChat {
 	get fontCommand() {return this.props.fontCommand;}
 	get commentVer() {return this.props.commentVer;}
 	get threadId() {return this.props.thread;}
+	get threadLabel() {return this.props.threadLabel;}
 	get nicoru() {return this.props.nicoru;}
 	set nicoru(v) {this.props.nicoru = v;}
 	get nicotta() { return !!this.props.nicotta;}
@@ -16405,6 +16541,18 @@ class NicoChatFilter extends Emitter {
 		this._fork0 = typeof params.fork0 === 'boolean' ? params.fork0 : true;
 		this._fork1 = typeof params.fork1 === 'boolean' ? params.fork1 : true;
 		this._fork2 = typeof params.fork2 === 'boolean' ? params.fork2 : true;
+		this._fork3 = typeof params.fork3 === 'boolean' ? params.fork3 : true;
+		this._defaultThread = typeof params.defaultThread === 'boolean' ? params.defaultThread : true;
+		this._ownerThread = typeof params.ownerThread === 'boolean' ? params.ownerThread : true;
+		this._communityThread = typeof params.communityThread === 'boolean' ? params.communityThread : true;
+		this._nicosThread = typeof params.nicosThread === 'boolean' ? params.nicosThread : true;
+		this._easyThread = typeof params.easyThread === 'boolean' ? params.easyThread : true;
+		this._aiThread = typeof params.aiThread === 'boolean' ? params.aiThread : true;
+		this._extraDefaultThread = typeof params.extraDefaultThread === 'boolean' ? params.extraDefaultThread : true;
+		this._extraOwnerThread = typeof params.extraOwnerThread === 'boolean' ? params.extraOwnerThread : true;
+		this._extraCommunityThread = typeof params.extraCommunityThread === 'boolean' ? params.extraCommunityThread : true;
+		this._extraNicosThread = typeof params.extraNicosThread === 'boolean' ? params.extraNicosThread : true;
+		this._extraEasyThread = typeof params.extraEasyThread === 'boolean' ? params.extraEasyThread : true;
 		this._enable = typeof params.enableFilter === 'boolean' ? params.enableFilter : true;
 		this._wordReg = null;
 		this._wordRegReg = null;
@@ -16454,6 +16602,90 @@ class NicoChatFilter extends Emitter {
 		v = !!v;
 		if (this._fork2 === v) { return; }
 		this._fork2 = v;
+		this.refresh();
+	}
+	get fork3() { return this._fork3; }
+	set fork3(v) {
+		v = !!v;
+		if (this._fork3 === v) { return; }
+		this._fork3 = v;
+		this.refresh();
+	}
+	get defaultThread() { return this._defaultThread; }
+	set defaultThread(v) {
+		v = !!v;
+		if (this._defaultThread === v) { return; }
+		this._defaultThread = v;
+		this.refresh();
+	}
+	get ownerThread() { return this._ownerThread; }
+	set ownerThread(v) {
+		v = !!v;
+		if (this._ownerThread === v) { return; }
+		this._ownerThread = v;
+		this.refresh();
+	}
+	get communityThread() { return this._communityThread; }
+	set communityThread(v) {
+		v = !!v;
+		if (this._communityThread === v) { return; }
+		this._communityThread = v;
+		this.refresh();
+	}
+	get nicosThread() { return this._nicosThread; }
+	set nicosThread(v) {
+		v = !!v;
+		if (this._nicosThread === v) { return; }
+		this._nicosThread = v;
+		this.refresh();
+	}
+	get easyThread() { return this._easyThread; }
+	set easyThread(v) {
+		v = !!v;
+		if (this._easyThread === v) { return; }
+		this._easyThread = v;
+		this.refresh();
+	}
+	get aiThread() { return this._aiThread; }
+	set aiThread(v) {
+		v = !!v;
+		if (this._aiThread === v) { return; }
+		this._aiThread = v;
+		this.refresh();
+	}
+	get extraDefaultThread() { return this._extraDefaultThread; }
+	set extraDefaultThread(v) {
+		v = !!v;
+		if (this._extraDefaultThread === v) { return; }
+		this._extraDefaultThread = v;
+		this.refresh();
+	}
+	get extraOwnerThread() { return this._extraOwnerThread; }
+	set extraOwnerThread(v) {
+		v = !!v;
+		if (this._extraOwnerThread === v) { return; }
+		this._extraOwnerThread = v;
+		this.refresh();
+	}
+	get extraCommunityThread() { return this._extraCommunityThread; }
+	set extraCommunityThread(v) {
+		v = !!v;
+		if (this._extraCommunityThread === v) { return; }
+		this._extraCommunityThread = v;
+		this.refresh();
+	}
+	get extraNicosThread() { return this._extraNicosThread; }
+	set extraNicosThread(v) {
+		v = !!v;
+		if (this._extraNicosThread === v) { return; }
+		this._extraNicosThread = v;
+		this.refresh();
+	}
+	get extraEasyThread() { return this._extraEasyThread; }
+	set extraEasyThread(v) {
+		v = !!v;
+		if (this._extraEasyThread === v) { return; }
+		this._extraEasyThread = v;
 		this.refresh();
 	}
 	refresh() { this._onChange(); }
@@ -16654,26 +16886,42 @@ class NicoChatFilter extends Emitter {
 		};
 	}
 	applyFilter(nicoChatArray) {
-		let before = nicoChatArray.length;
+		const before = nicoChatArray.length;
 		if (before < 1) {
 			return nicoChatArray;
 		}
-		let timeKey = 'applyNgFilter: ' + nicoChatArray[0].type;
+		const timeKey = 'applyNgFilter: ' + nicoChatArray[0].type;
 		window.console.time(timeKey);
-		let filterFunc = this.getFilterFunc();
+		const filterFunc = this.getFilterFunc();
 		let result = nicoChatArray.filter(filterFunc);
-		if (before.length !== result.length && this._removeNgMatchedUser) {
-			let removedUserIds =
-				nicoChatArray.filter(chat => !result.includes(chat)).map(chat => chat.userId);
-			result = result.filter(chat => !removedUserIds.includes(chat.userId));
-		}
-		if (!this.fork0 || !this.fork1 || !this.fork2) {
-			const allows = [];
-			this._fork0 && allows.push(0);
-			this._fork1 && allows.push(1);
-			this._fork2 && allows.push(2);
-			result = result.filter(chat => allows.includes(chat.fork));
-		}
+		const removedUserIds = (before !== result.length && this._removeNgMatchedUser)
+			? nicoChatArray.filter(chat => !result.includes(chat)).map(chat => chat.userId)
+			: [];
+		const denyTypes = [
+			!this.fork0 && 0,
+			!this.fork1 && 1,
+			!this.fork2 && 2,
+			!this.fork3 && 3,
+		].filter(type => type !== false);
+		const denyThreadTypes = [
+			!this.defaultThread        && 'default',
+			!this.ownerThread          && 'owner',
+			!this.communityThread      && 'community',
+			!this.nicosThread          && 'nicos',
+			!this.easyThread           && 'easy',
+			!this.aiThread             && 'ai',
+			!this.extraDefaultThread   && 'extra-default',
+			!this.extraOwnerThread     && 'extra-owner',
+			!this.extraCommunityThread && 'extra-community',
+			!this.extraNicosThread     && 'extra-nicos',
+			!this.extraEasyThread      && 'extra-easy',
+		].filter(type => type !== false);
+		result = result.filter(chat => {
+			if (removedUserIds.length > 0 && removedUserIds.includes(chat.userId)) {
+				return false;
+			}
+			return !denyTypes.includes(chat.fork) && !denyThreadTypes.includes(chat.threadLabel);
+		});
 		window.console.timeEnd(timeKey);
 		window.console.log('NG判定結果: %s/%s', result.length, before);
 		return result;
@@ -16745,6 +16993,8 @@ class NicoCommentPlayer extends Emitter {
 			}
 		} else if (typeof data.getElementsByTagName === 'function') {
 			this._model.setXml(data, options);
+		} else if (options.format === 'threads') {
+			this._model.setThreads(data, options);
 		} else {
 			this._model.setData(data, options);
 		}
@@ -16791,6 +17041,9 @@ class NicoCommentPlayer extends Emitter {
 		const nicoChat = NicoChat.create(Object.assign({text, cmd, vpos}, options));
 		this._model.addChat(nicoChat);
 		return nicoChat;
+	}
+	removeChat(nicoChat) {
+		this._model.removeChat(nicoChat);
 	}
 	set playbackRate(v) {
 		if (this._view) {
@@ -16860,6 +17113,27 @@ class NicoComment extends Emitter {
 	}
 	setXml(xml, options) {
 		const chatsData = Array.from(xml.getElementsByTagName('chat')).filter(chat => chat.firstChild);
+		return this.setChats(chatsData, options);
+	}
+	setThreads(data, options) {
+		const chatsData = data.threads.flatMap(thread => {
+			return thread.comments.map(c => {
+				return Object.assign({
+					text: c.body,
+					date: new Date(c.postedAt).getTime() / 1000,
+					cmd: c.commands.join(' '),
+					premium: c.isPremium,
+					user_id: c.userId,
+					vpos: c.vposMs / 10,
+					fork: thread.info.fork,
+					isMine: c.isMyPost,
+					thread: thread.id,
+					nicoru: c.nicoruCount,
+					layerId: thread.info.layer.index,
+					threadLabel: thread.info.label,
+				}, c);
+			})
+		});
 		return this.setChats(chatsData, options);
 	}
 	async setData(data, options) {
@@ -17037,6 +17311,21 @@ class NicoComment extends Emitter {
 		group.addChat(nicoChat, group);
 		this.emit('addChat');
 	}
+	removeChat(nicoChat) {
+		let group;
+		switch (nicoChat.type) {
+			case NicoChat.TYPE.TOP:
+				group = this.topGroup;
+				break;
+			case NicoChat.TYPE.BOTTOM:
+				group = this.bottomGroup;
+				break;
+			default:
+				group = this.nakaGroup;
+				break;
+		}
+		group.removeChat(nicoChat, group);
+	}
 	_onChange(e) {
 		console.log('NicoComment.onChange: ', e);
 		e = e || {};
@@ -17155,7 +17444,6 @@ const OffscreenLayer = config => {
 		let layer;
 		const onload = () => {
 			frame.onload = null;
-			if (util.isChrome()) { frame.removeAttribute('srcdoc'); }
 			console.log('%conOffScreenLayerLoad', 'background: lightgreen;');
 			createTextField();
 			let doc = offScreenFrame.contentWindow.document;
@@ -17367,6 +17655,18 @@ class NicoChatGroup extends Emitter {
 		if (this._nicoChatFilter.isSafe(nicoChat)) {
 			this._filteredMembers.push(nicoChat);
 			this.emit('addChat', nicoChat);
+		}
+	}
+	_getChat(nicoChat) {
+		return (chat) => chat.threadId === nicoChat.threadId && chat.fork === nicoChat.fork && chat.no === nicoChat.no
+	}
+	removeChat(nicoChat) {
+		const getChat = this._getChat(nicoChat);
+		this._members.splice(this._members.findIndex(getChat), 1);
+		nicoChat.group = this;
+		if (this._nicoChatFilter.isSafe(nicoChat)) {
+			this._filteredMembers.splice(this._filteredMembers.findIndex(getChat), 1);
+			this.onChange(null);
 		}
 	}
 	get type() {return this._type;}
@@ -17677,7 +17977,6 @@ class NicoCommentCss3PlayerView extends Emitter {
 		const onload = () => {
 			let win, doc;
 			iframe.onload = null;
-			if (env.isChrome()) {iframe.removeAttribute('srcdoc');}
 			try {
 				win = iframe.contentWindow;
 				doc = iframe.contentWindow.document;
@@ -17749,6 +18048,15 @@ class NicoCommentCss3PlayerView extends Emitter {
 						console.nicoru('update easyCommentOpacity', v, this._config.easyCommentOpacity, commentLayerOuter);
 						cssUtil.setProps(
 						[commentLayerOuter, '--easy-comment-opacity', cssUtil.number(v * 1)]);
+					}
+				, 100)
+			);
+			this._config.onkey('aiCommentOpacity',
+				_.debounce(
+					v => {
+						console.nicoru('update aiCommentOpacity', v, this._config.aiCommentOpacity, commentLayerOuter);
+						cssUtil.setProps(
+						[commentLayerOuter, '--ai-comment-opacity', cssUtil.number(v * 1)]);
 					}
 				, 100)
 			);
@@ -17962,8 +18270,9 @@ class NicoCommentCss3PlayerView extends Emitter {
 		const commentLayer = this.commentLayer;
 		const elements = this.removingElements;
 		const af = this.window.Array.from; // prototype.js汚染を警戒
-		let inViewElements =  // 表示上限オーバー時、かんたんコメントが優先的に消えるように
-			af(commentLayer.querySelectorAll('.nicoChat.fork2'))
+		let inViewElements =  // 表示上限オーバー時、AIキャラクターコメントとかんたんコメントが優先的に消えるように
+			af(commentLayer.querySelectorAll('.nicoChat.fork3'))
+				.concat(af(commentLayer.querySelectorAll('.nicoChat.fork2')))
 				.concat(af(commentLayer.querySelectorAll('.nicoChat.fork0')));
 		for (let i = inViewElements.length - max - 1; i >= 0; i--) {
 			elements.push(inViewElements[i]);
@@ -18109,6 +18418,7 @@ NicoCommentCss3PlayerView.__TPL__ = ((Config) => {
 	let ownerShadowColor = Config.props['commentLayer.ownerCommentShadowColor'];
 	ownerShadowColor = ownerShadowColor.replace(/([^a-z^0-9^#])/ig, '');
 	let easyCommentOpacity = Config.props['commentLayer.easyCommentOpacity'];
+	let aiCommentOpacity = Config.props['commentLayer.aiCommentOpacity'];
 	let textShadowColor = '#000';
 	let textShadowGray = '#888';
 	return (`
@@ -18425,6 +18735,9 @@ body.in-capture .commentLayer {
 }
 .nicoChat.fork2 {
 	opacity: var(--easy-comment-opacity, ${easyCommentOpacity}) !important;
+}
+.nicoChat.fork3 {
+	opacity: var(--ai-comment-opacity, ${aiCommentOpacity}) !important;
 }
 .nicoChat.blink {
 	border: 1px solid #f00;
@@ -19535,6 +19848,7 @@ class CommentListView extends Emitter {
 		this._$menu
 			.css('transform', `translate(0, ${item.dataset.top}px)`)
 			.attr('data-item-id', item.dataset.itemId)
+			.attr('data-is-mine', item.dataset.isMine)
 			.addClass('show');
 	}
 	_onMenuClick(e) {
@@ -20000,11 +20314,11 @@ CommentListView.__tpl__ = (`
 	<div class="virtualScrollBarContainer"><div class="virtualScrollBar"></div></div><div class="timeBar"></div>
 	<div id="listContainer">
 		<div class="listMenu">
-			<span class="menuButton itemDetailRequest"
-				data-command="itemDetailRequest" title="詳細">？</span>
-			<span class="menuButton clipBoard"        data-command="clipBoard" title="クリップボードにコピー">copy</span>
-			<span class="menuButton addUserIdFilter"  data-command="addUserIdFilter" title="NGユーザー">NGuser</span>
-			<span class="menuButton addWordFilter"    data-command="addWordFilter" title="NGワード">NGword</span>
+			<span class="menuButton itemDetailRequest" data-command="itemDetailRequest" title="詳細">？</span>
+			<span class="menuButton removeComment"     data-command="removeComment" title="コメントを削除">delete</span>
+			<span class="menuButton clipBoard"         data-command="clipBoard" title="クリップボードにコピー">copy</span>
+			<span class="menuButton addUserIdFilter"   data-command="addUserIdFilter" title="NGユーザー">NGuser</span>
+			<span class="menuButton addWordFilter"     data-command="addWordFilter" title="NGワード">NGword</span>
 		</div>
 		<div id="listContainerInner"></div>
 	</div>
@@ -20026,25 +20340,27 @@ const CommentListItemView = (() => {
 			${CONSTANT.SCROLLBAR_CSS}
 			.listMenu {
 				position: absolute;
-				display: block;
-			}
-			.listMenu.show {
-				display: block;
 				width: 100%;
-				left: 0;
+				right: 0;
 				z-index: 100;
+				display: flex;
+				flex-direction: row;
+				justify-content: flex-end;
+				gap: 8px;
+				padding-inline: 8px;
+			}
+			.listMenu:not(.show) {
+				display: none;
 			}
 			.listMenu  .menuButton {
-				display: inline-block;
-				position: absolute;
 				font-size: 13px;
 				line-height: 20px;
 				border: 1px solid #666;
 				color: #fff;
 				background: #666;
 				cursor: pointer;
-				top: 0;
 				text-align: center;
+				width: 48px;
 			}
 			.listMenu .menuButton:hover {
 				border: 1px solid #ccc;
@@ -20055,21 +20371,18 @@ const CommentListItemView = (() => {
 				transform: translate(0, 1px);
 			}
 			.listMenu .itemDetailRequest {
-				right: 176px;
 				width: auto;
 				padding: 0 8px;
 			}
-			.listMenu .clipBoard {
-				right: 120px;
-				width: 48px;
+			/* 自分の投稿をNGに突っ込む奴いるのかな？とは思いつつ残す。どっかで消すかなんかしたい
+			.listMenu[data-is-mine="true"] .addWordFilter {
+				display: none;
 			}
-			.listMenu .addWordFilter {
-				right: 64px;
-				width: 48px;
-			}
-			.listMenu .addUserIdFilter {
-				right: 8px;
-				width: 48px;
+			.listMenu[data-is-mine="true"] .addUserIdFilter {
+				display: none;
+			}*/
+			.listMenu:not([data-is-mine="true"]) .removeComment {
+				display: none;
 			}
 			.commentListItem {
 				position: absolute;
@@ -20115,7 +20428,7 @@ const CommentListItemView = (() => {
 			}
 			.commentListItem .nicoru-icon {
 				position: absolute;
-				pointer-events: none;
+				pointer-events: auto;
 				display: inline-block;
 				cursor: pointer;
 				visibility: hidden;
@@ -20129,9 +20442,6 @@ const CommentListItemView = (() => {
 			}
 			.commentListItem:hover .nicoru-icon {
 				visibility: visible;
-			}
-			.is-premium .commentListItem:hover .nicoru-icon {
-				pointer-events: auto;
 			}
 			.commentListItem.nicotta .nicoru-icon {
 				visibility: visible;
@@ -20196,7 +20506,7 @@ const CommentListItemView = (() => {
 			.commentListItem.fork1 .timepos {
 				text-shadow: 1px 1px 0 #008800, -1px -1px 0 #008800 !important;
 			}
-			.commentListItem.fork2 .timepos {
+			.commentListItem:where(.fork2, .fork3) .timepos {
 				opacity: 0.6;
 			}
 			.commentListItem.fork1 .text {
@@ -20300,6 +20610,7 @@ const CommentListItemView = (() => {
 				vpos: item.vpos,
 				top: this.top,
 				thread: item.threadId,
+				isMine: item.isMine,
 				title: `${item.no}: ${formattedDate} ID:${item.userId}\n${item.text}`,
 				time3dp,
 				valhalla: item.valhalla,
@@ -20406,9 +20717,15 @@ class CommentListItem {
 	get valhalla() {return this.nicoChat.valhalla;}
 	get nicotta() { return this.nicoChat.nicotta;}
 	set nicotta(v) { this.nicoChat.nicotta = v; }
+	get isMine() {return this.nicoChat.isMine;}
 }
 CommentListItem._itemId = 0;
 class CommentPanelView extends Emitter {
+	languages = [
+		['ja-jp', "日本語"],
+		['en-us', "English (US)"],
+		['zh-tw', "中文 (繁體)"]
+	];
 	constructor(params) {
 		super();
 		this.$container = params.$container;
@@ -20417,6 +20734,17 @@ class CommentPanelView extends Emitter {
 		css.addStyle(CommentPanelView.__css__);
 		const $view = this.$view = uq.html(CommentPanelView.__tpl__);
 		this.$container.append($view);
+		const langs = document.querySelector('.commentLanguageSelector');
+		for (const [language, label] of this.languages) {
+			const list = document.createElement('li');
+			list.className = 'commentPanel-command';
+			Object.assign(list.dataset, {
+				command: 'update-commentLanguage',
+				param: language,
+			});
+			list.textContent = label;
+			langs.append(list);
+		}
 		const $menu = this._$menu = this.$view.find('.commentPanel-menu');
 		global.debug.commentPanelView = this;
 		const listView = this._listView = new CommentListView({
@@ -20443,7 +20771,7 @@ class CommentPanelView extends Emitter {
 		global.emitter.on('hideHover', () => $menu.removeClass('show'));
 	}
 	toggleClass(className, v) {
-		this.$view.raf.toggleClass(className, v);
+		return this.$view.raf.toggleClass(className, v);
 	}
 	_onModelCurrentTimeUpdate(sec, viewIndex) {
 		if (!this.$view){
@@ -20496,10 +20824,11 @@ class CommentPanelView extends Emitter {
 	}
 	_onCommentPanelStatusUpdate() {
 		const commentPanel = this.commentPanel;
-		const $view = this.$view.raf.toggleClass('autoScroll', commentPanel.isAutoScroll);
+		const $view = this.toggleClass('autoScroll', commentPanel.isAutoScroll);
 		const langClass = `lang-${commentPanel.getLanguage()}`;
 		if (!$view.hasClass(langClass)) {
-			$view.raf.removeClass('lang-ja_JP lang-en_US lang-zh_TW').addClass(langClass);
+			$view.raf.removeClass(this.languages.map(([x]) => `lang-${x}`).join(' '));
+			$view.raf.addClass(langClass);
 		}
 	}
 }
@@ -20579,9 +20908,9 @@ CommentPanelView.__css__ = `
 		.commentPanel-menu li {
 			line-height: 20px;
 		}
-		.commentPanel-container.lang-ja_JP .commentPanel-command[data-param=ja_JP],
-		.commentPanel-container.lang-en_US .commentPanel-command[data-param=en_US],
-		.commentPanel-container.lang-zh_TW .commentPanel-command[data-param=zh_TW] {
+		.commentPanel-container.lang-ja-jp .commentPanel-command[data-param=ja-jp],
+		.commentPanel-container.lang-en-us .commentPanel-command[data-param=en-us],
+		.commentPanel-container.lang-zh-tw .commentPanel-command[data-param=zh-tw] {
 			font-weight: bolder;
 			color: #ff9;
 		}
@@ -20605,21 +20934,14 @@ CommentPanelView.__tpl__ = (`
 							<li class="commentPanel-command" data-command="sortBy" data-param="nicoru:desc">
 								ニコる数で並べる
 							</li>
-							<hr class="separator">
-							<li class="commentPanel-command" data-command="update-commentLanguage" data-param="ja_JP">
-								日本語
-							</li>
-							<li class="commentPanel-command" data-command="update-commentLanguage" data-param="en_US">
-								English
-							</li>
-							<li class="commentPanel-command" data-command="update-commentLanguage" data-param="zh_TW">
-								中文
-							</li>
+						</ul>
+						<hr class="separator">
+						<ul class="commentLanguageSelector">
 						</ul>
 						</div>
 					</div>
 				</div>
-			<div class="timeMachineContainer"></div>
+				<div class="timeMachineContainer"></div>
 			</div>
 			<div class="commentPanel-frame"></div>
 		</div>
@@ -20632,7 +20954,7 @@ class CommentPanel extends Emitter {
 		const player = this._player = params.player;
 		this._autoScroll = _.isBoolean(params.autoScroll) ? params.autoScroll : true;
 		this._model = new CommentListModel({});
-		this._language = params.language || 'ja_JP';
+		this._language = params.language || 'ja-jp';
 		player.on('commentParsed', _.debounce(this._onCommentParsed.bind(this), 500));
 		player.on('commentChange', _.debounce(this._onCommentChange.bind(this), 500));
 		player.on('commentReady', _.debounce(this._onCommentReady.bind(this), 500));
@@ -20688,6 +21010,10 @@ class CommentPanel extends Emitter {
 			case 'clipBoard':
 				Clipboard.copyText(item.text);
 				this.emit('command', 'notify', 'クリップボードにコピーしました');
+				break;
+			case 'removeComment':
+				(new Promise((resolve, reject) => this.emit('deleteChat', {resolve, reject}, item.nicoChat)))
+					.then(() => this._model.removeItem(item));
 				break;
 			case 'addUserIdFilter':
 				this._model.removeItem(item);
@@ -20752,7 +21078,7 @@ class CommentPanel extends Emitter {
 		return this._autoScroll;
 	}
 	getLanguage() {
-		return this._language || 'ja_JP';
+		return this._language || 'ja-jp';
 	}
 	getThreadInfo() {
 		return this._threadInfo;
@@ -21084,7 +21410,7 @@ class VideoListItem {
 			num_res: 0,
 			mylist_counter: 0,
 			view_counter: 0,
-			thumbnail_url: 'https://nicovideo.cdn.nimg.jp/web/img/user/thumb/blank_s.jpg',
+			thumbnail_url: 'https://nicovideo.cdn.nimg.jp/web/images/bundle/nicovideo/components/Thumbnail/Thumbnail-placeholder.jpg',
 			first_retrieve: postedAt,
 		});
 	}
@@ -21171,7 +21497,7 @@ class VideoListItem {
 			isPlayed: !!rawData.played,
 			isLazy: true,
 			isDragging: false,
-			isFavorite: false,
+			isFavorited: false,
 			isDragover: false,
 			isDropped: false,
 			isPocketResolved: false,
@@ -21262,10 +21588,10 @@ class VideoListItem {
 		this.state.isPlayed = v;
 		this.notifyUpdate();
 	}
-	get isFavorite() { return this.state.isFavorite; }
-	set isFavorite(v) {
-		if (this.isFavorite === v) { return; }
-		this.state.isFavorite = v;
+	get isFavorited() { return this.state.isFavorited; }
+	set isFavorited(v) {
+		if (this.isFavorited === v) { return; }
+		this.state.isFavorited = v;
 		this.notifyUpdate();
 	}
 	get isPocketResolved() { return this.state.isPocketResolved; }
@@ -21585,7 +21911,7 @@ class VideoListItemView  {
 	.videoItem.is-ng-rejected {
 		display: none;
 	}
-	.videoItem.is-fav-favorited .postedAt::after {
+	.videoItem.is-favorited .postedAt::after {
 		content: ' ★';
 		color: #fea;
 		text-shadow: 2px 2px 2px #000;
@@ -21788,7 +22114,7 @@ class VideoListItemView  {
 			'is-dragging':      item.isDragging,
 			'is-dragover':      item.isDragover,
 			'is-drropped':      item.isDropped,
-			'is-favorite':      item.isFavorite,
+			'is-favorited':      item.isFavorited,
 			'is-not-resolved': !item.isPocketResolved
 		});
 		const thumbnailStyle = `background-image: url(${item.thumbnail})`;
@@ -21805,7 +22131,7 @@ class VideoListItemView  {
 						<span class="command pocket-info" data-command="pocket-info" data-param=${watchId} title="動画情報">？</span>
 					</div>
 					<div class="videoInfo">
-						<div class="postedAt">${item.postedAt}</div>
+						<div class="postedAt">${new Date(item.postedAt).toLocaleString()}</div>
 						<div class="title">
 							<a class="command videoLink"
 								href=${watchUrl} data-command="select" data-param=${itemId} title=${title}>${title}</a>
@@ -22076,7 +22402,7 @@ class VideoListView extends Emitter {
 			this.model.removeItem(item);
 			return;
 		}
-		item.isFavorite = isFav;
+		item.isFavorited = isFav;
 		item.isPocketResolved = true;
 		item.watchId = info.watchId;
 		item.info = info;
@@ -22988,41 +23314,27 @@ class PlayList extends VideoList {
 		const items = videoListItemsRawData.map(raw => new VideoListItem(raw));
 		return this._insertAll(items, options);
 	}
-	loadFromMylist(mylistId, options, msgInfo) {
+	load(playlist, options, msgInfo) {
 		this._initializeView();
-		if (!this._mylistApiLoader) {
-			this._mylistApiLoader = MylistApiLoader;
+		if (!this._playlistApiLoader) {
+			this._playlistApiLoader = PlaylistApiLoader;
 		}
-		window.console.time('loadMylist: ' + mylistId);
-		return this._mylistApiLoader
-			.getMylistItems(mylistId, options, msgInfo).then(items => {
-				window.console.timeEnd('loadMylist: ' + mylistId);
-				let videoListItems = items.filter(item => {
-					if (item.id === null) {
-						return;
-					} // ごく稀にある？idが抹消されたレコード
-					if (item.item_data) {
-						if (parseInt(item.item_type, 10) !== 0) {
-							return;
-						} // not video
-						if (parseInt(item.item_data.deleted, 10) !== 0) {
-							return;
-						} // 削除動画を除外
-					} else {
-						if (item.thumbnail_url && item.thumbnail_url.indexOf('video_deleted') >= 0) {
-							return;
-						}
-					}
-					return true;
-				}).map(item => VideoListItem.createByMylistItem(item));
+		const timeKey = `loadPlaylist: ${playlist.type} ${playlist.id || playlist.options.tag || playlist.options.keyword}`;
+		window.console.time(timeKey);
+		return this._playlistApiLoader
+			.load(playlist, msgInfo).then(items => {
+				window.console.timeEnd(timeKey);
+				let videoListItems = items.map(item => VideoListItem.createByMylistItem(item));
 				if (videoListItems.length < 1) {
 					return Promise.reject({
 						status: 'fail',
-						message: 'マイリストの取得に失敗しました'
+						message: 'プレイリストの取得に失敗しました'
 					});
 				}
 				if (options.shuffle) {
 					videoListItems = _.shuffle(videoListItems);
+				} else if (playlist.type === 'user-uploaded' && playlist.options == null) {
+					videoListItems.reverse();
 				}
 				if (options.insert) {
 					this._insertAll(videoListItems, options);
@@ -23036,48 +23348,14 @@ class PlayList extends VideoList {
 					status: 'ok',
 					message:
 						options.append ?
-							'マイリストの内容をプレイリストに追加しました' :
-							'マイリストの内容をプレイリストに読み込みしました'
-				});
-			});
-	}
-	loadUploadedVideo(userId, options) {
-		this._initializeView();
-		if (!this._uploadedVideoApiLoader) {
-			this._uploadedVideoApiLoader = UploadedVideoApiLoader;
-		}
-		window.console.time('loadUploadedVideos' + userId);
-		return this._uploadedVideoApiLoader
-			.load(userId, options).then(items => {
-				window.console.timeEnd('loadUploadedVideos' + userId);
-				let videoListItems = items.map(item => VideoListItem.createByMylistItem(item));
-				if (videoListItems.length < 1) {
-					return Promise.reject({});
-				}
-				videoListItems.reverse();
-				if (options.shuffle) {
-					videoListItems = _.shuffle(videoListItems);
-				}
-				if (options.insert) {
-					this._insertAll(videoListItems, options);
-				} else if (options.append) {
-					this._appendAll(videoListItems, options);
-				} else {
-					this._replaceAll(videoListItems, options);
-				}
-				this.emit('update');
-				return Promise.resolve({
-					status: 'ok',
-					message:
-						options.append ?
-							'投稿動画一覧をプレイリストに追加しました' :
-							'投稿動画一覧をプレイリストに読み込みしました'
+							'プレイリストに追加しました' :
+							'プレイリストに読み込みしました'
 				});
 			});
 	}
 	loadSearchVideo(word, options, limit = 300) {
 		this._initializeView();
-		if (!this._searchApiLoader) {
+		if (!this._nicoSearchApiLoader) {
 			this._nicoSearchApiLoader = NicoSearchApiV2Loader;
 		}
 		window.console.time('loadSearchVideos' + word);
@@ -23118,45 +23396,6 @@ class PlayList extends VideoList {
 							'検索結果をプレイリストに読み込みしました'
 				});
 			});
-	}
-	async loadSeriesList(seriesId, options = {}) {
-		this._initializeView();
-		const data = await RecommendAPILoader.loadSeries(seriesId, options);
-		const videoItems = [];
-		(data.items || []).forEach(item => {
-			if (item.contentType !== 'video') {
-				return;
-			}
-			const content = item.content;
-			videoItems.push(new VideoListItem({
-				_format: 'recommendApi',
-				_data: item,
-				id: item.id,
-				uniq_id: item.id,
-				title: content.title,
-				length_seconds: content.duration,
-				num_res: content.count.comment,
-				mylist_counter: content.count.mylist,
-				view_counter: content.count.view,
-				thumbnail_url: content.thumbnail.url,
-				first_retrieve: content.registeredAt,
-				has_data: true,
-				is_translated: false
-			}));
-		});
-		if (options.insert) {
-			this._insertAll(videoItems, options);
-		} else if (options.append) {
-			this._appendAll(videoItems, options);
-		} else {
-			this._replaceAll(videoItems, options);
-		}
-		this.emit('update');
-		return {
-			status: 'ok',
-			message:
-				options.append ? '動画シリーズをプレイリストに追加しました' : '動画シリーズをプレイリストに読み込みしました'
-		};
 	}
 	insert(watchId) {
 		this._initializeView();
@@ -23537,9 +23776,7 @@ class VideoWatchOptions {
 	get mylistLoadOptions() {
 		let options = {};
 		let query = this.query;
-		options.order = query.order;
-		options.sort = query.sort;
-		options.group_id = query.group_id;
+		options.shuffle = parseInt(query.shuffle, 10) === 1;
 		options.watchId = this._watchId;
 		return options;
 	}
@@ -23549,8 +23786,7 @@ class VideoWatchOptions {
 		if (eventType !== 'click' || query.continuous !== '1') {
 			return false;
 		}
-		if (['mylist', 'deflist', 'tag', 'search'].includes(query.playlist_type) &&
-			(query.group_id || query.order)) {
+		if (query.playlist.type) {
 			return true;
 		}
 		return false;
@@ -23572,7 +23808,7 @@ class VideoWatchOptions {
 		return this._options.reloadCount > 0;
 	}
 	get videoServerType() {
-		return this._options.videoServerType;
+		return this._options.videoServerType ?? this._config.getValue('videoServerType');
 	}
 	get isAutoZenTubeDisabled() {
 		return !!this._options.isAutoZenTubeDisabled;
@@ -23581,8 +23817,10 @@ class VideoWatchOptions {
 		return this._options.reloadCount;
 	}
 	get currentTime() {
-		return _.isNumber(this._options.currentTime) ?
-			parseFloat(this._options.currentTime, 10) : 0;
+		if (_.isNumber(this._options.currentTime))
+			return parseFloat(this._options.currentTime, 10);
+		return !isNaN(this.query.from) ?
+			parseFloat(this.query.from, 10) : 0;
 	}
 	createForVideoChange(options) {
 		options = options || {};
@@ -23807,6 +24045,10 @@ class NicoVideoPlayerDialogView extends Emitter {
 		if (mylistReg) {
 			return this._onCommand('playlistSetMylist', mylistReg[2]);
 		}
+		const seriesReg = /series\/(\d+)/.exec(text);
+		if (seriesReg) {
+			return this._onCommand('playlistSetSeries', seriesReg[1]);
+		}
 		const ownerReg = /user\/(\d+)/.exec(text);
 		if (ownerReg) {
 			return this._onCommand('playlistSetUploadedVideo', ownerReg[1]);
@@ -23883,7 +24125,6 @@ class NicoVideoPlayerDialogView extends Emitter {
 		}
 	}
 	_onVideoServerType(type, sessionInfo) {
-		this.toggleClass('is-dmcPlaying', type === 'dmc');
 		this.emit('videoServerType', type, sessionInfo);
 	}
 	_onVideoPlay() {
@@ -23915,8 +24156,8 @@ class NicoVideoPlayerDialogView extends Emitter {
 			isBackComment: 'is-backComment',
 			isShowComment: 'is-showComment',
 			isDebug: 'is-debug',
+			isDomandAvailable: 'is-domandAvailable',
 			isDmcAvailable: 'is-dmcAvailable',
-			isDmcPlaying: 'is-dmcPlaying',
 			isError: 'is-error',
 			isLoading: 'is-loading',
 			isMute: 'is-mute',
@@ -23987,9 +24228,9 @@ class NicoVideoPlayerDialogView extends Emitter {
 		];
 	}
 	_applyScreenMode(force = false) {
-		const screenMode = `zenzaScreenMode_${this._state.screenMode}`;
+		const screenMode = this._state.isOpen ? `zenzaScreenMode_${this._state.screenMode}` : '';
 		if (!force && this._lastScreenMode === screenMode) { return; }
-		this._lastScreenMode = screenMode;
+		this._lastScreenMode = '';
 		const modes = this._getScreenModeClassNameTable();
 		const isFull = util.fullscreen.now();
 		Object.assign(document.body.dataset, {
@@ -24355,12 +24596,6 @@ NicoVideoPlayerDialogView.__css__ = `
 	.is-regularUser  .forPremium {
 		display: none !important;
 	}
-	.forDmc {
-		display: none;
-	}
-	.is-dmcPlaying .forDmc {
-		display: inherit;
-	}
 	.zenzaVideoPlayerDialog * {
 		box-sizing: border-box;
 	}
@@ -24375,7 +24610,7 @@ NicoVideoPlayerDialogView.__css__ = `
 	.zenzaVideoPlayerDialogInner {
 		background: #000;
 		box-sizing: border-box;
-		z-index: ${CONSTANT.BASE_Z_INDEX + 1};
+		z-index: 1;
 		box-shadow: 4px 4px 4px #000;
 	}
 	.zenzaPlayerContainer {
@@ -24458,7 +24693,7 @@ NicoVideoPlayerDialogView.__css__ = `
 	.zenzaPlayerContainer.is-loading .loadingMessageContainer {
 		display: inline-block;
 		position: absolute;
-		z-index: ${CONSTANT.BASE_Z_INDEX + 10000};
+		z-index: 10000;
 		right: 8px;
 		bottom: 8px;
 		font-size: 24px;
@@ -24494,7 +24729,7 @@ NicoVideoPlayerDialogView.__css__ = `
 	.zenzaPlayerContainer.is-error .errorMessageContainer {
 		display: inline-block;
 		position: absolute;
-		z-index: ${CONSTANT.BASE_Z_INDEX + 10000};
+		z-index: 10000;
 		top: 50%;
 		left: 50%;
 		padding: 8px 16px;
@@ -24549,8 +24784,7 @@ NicoVideoPlayerDialogView.__css__ = `
 		}
 		/* 960x540 */
 		@media
-			(min-width: 1328px) and (max-width: 1663px) and
-			(min-height: 700px) and (min-height: 899px)
+			(min-width: 1328px) and (min-height: 700px)
 		{
 			.zenzaScreenMode_big .zenzaPlayerContainer {
 				width: calc(960px * 1.05);
@@ -24902,17 +25136,21 @@ class NicoVideoPlayerDialog extends Emitter {
 				this._playerConfig.props.dmcVideoQuality = param;
 				this.reload({videoServerType: 'dmc'});
 				break;
+			case 'update-domandVideoQuality':
+				this._playerConfig.props.videoServerType = 'domand';
+				this._playerConfig.props.domandVideoQuality = param;
+				this.reload({videoServerType: 'domand'});
+				break;
 			case 'update-videoServerType':
 				this._playerConfig.props.videoServerType = param;
-				this.reload({videoServerType: param === 'dmc' ? 'dmc' : 'smile'});
+				this.reload({videoServerType: param === 'domand' ? 'domand' : 'dmc'});
 				break;
 			case 'update-commentLanguage':
-				command = command.replace(/^update-/, '');
-				if (this._playerConfig.props[command] === param) {
+				if (this._playerConfig.props.commentLanguage === param) {
 					break;
 				}
-				this._playerConfig.props[command] = param;
-				this.reloadComment(param);
+				this._playerConfig.props.commentLanguage = param;
+				this.reloadComment();
 				break;
 			case 'saveMymemory':
 				util.saveMymemory(this, this._state.videoInfo);
@@ -25007,6 +25245,18 @@ class NicoVideoPlayerDialog extends Emitter {
 			case 'filter.fork0':
 			case 'filter.fork1':
 			case 'filter.fork2':
+			case 'filter.fork3':
+			case 'filter.defaultThread':
+			case 'filter.ownerThread':
+			case 'filter.communityThread':
+			case 'filter.nicosThread':
+			case 'filter.easyThread':
+			case 'filter.aiThread':
+			case 'filter.extraDefaultThread':
+			case 'filter.extraOwnerThread':
+			case 'filter.extraCommunityThread':
+			case 'filter.extraNicosThread':
+			case 'filter.extraEasyThread':
 			case 'removeNgMatchedUser':
 				filter[key.replace(/^.*\./, '')] = value;
 				break;
@@ -25021,24 +25271,20 @@ class NicoVideoPlayerDialog extends Emitter {
 	_onPlaylistInsert(watchId) {
 		this._playlist.insert(watchId);
 	}
-	_onPlaylistSetMylist(mylistId, option) {
-		option = Object.assign({watchId: this._watchId}, option || {});
-		option.order = option.order == null ? 'asc' : option.order;
-		option.sort = option.sort == null ? 'registeredAt' : option.sort;
+	_onPlaylistSetMylist(id) {
+		let option = {watchId: this._watchId};
 		option.insert = this._playlist.isEnable;
-		let query = this._videoWatchOptions.query;
-		option.shuffle = parseInt(query.shuffle, 10) === 1;
-		this._playlist.loadFromMylist(mylistId, option, this._videoInfo.msgInfo).then(result => {
+		this._playlist.load({ type: 'mylist', id }, option, this._videoInfo.msgInfo).then(result => {
 				this.execCommand('notify', result.message);
 				this._state.currentTab = 'playlist';
 				this._playlist.insertCurrentVideo(this._videoInfo);
 			},
 			() => this.execCommand('alert', 'マイリストのロード失敗'));
 	}
-	_onPlaylistSetUploadedVideo(userId, option) {
-		option = Object.assign({watchId: this._watchId}, option || {});
+	_onPlaylistSetUploadedVideo(id) {
+		let option = {watchId: this._watchId};
 		option.insert = this._playlist.isEnable;
-		this._playlist.loadUploadedVideo(userId, option).then(result => {
+		this._playlist.load({ type: 'user-uploaded', id }, option, this._videoInfo.msgInfo).then(result => {
 				this.execCommand('notify', result.message);
 				this._state.currentTab = 'playlist';
 				this._playlist.insertCurrentVideo(this._videoInfo);
@@ -25071,11 +25317,11 @@ class NicoVideoPlayerDialog extends Emitter {
 				this.execCommand('alert', err.message || '検索失敗または該当無し: 「' + word + '」');
 			});
 	}
-	_onPlaylistSetSeriesVideo(id, option = {}) {
-		option = Object.assign({watchId: this._watchId}, option || {});
+	_onPlaylistSetSeriesVideo(id) {
+		let option = {watchId: this._watchId};
 		option.insert = this._playlist.isEnable;
 		this._state.currentTab = 'playlist';
-		this._playlist.loadSeriesList(id, option).then(result => {
+		this._playlist.load({ type: 'series', id }, option, this._videoInfo.msgInfo).then(result => {
 			this.execCommand('notify', result.message);
 			this._playlist.insertCurrentVideo(this._videoInfo);
 			window.setTimeout(() => this._playlist.scrollToActiveItem(), 1000);
@@ -25352,23 +25598,23 @@ class NicoVideoPlayerDialog extends Emitter {
 		const videoInfo = this._videoInfo = new VideoInfoModel(videoInfoData, localCacheData);
 		this._watchId = videoInfo.watchId;
 		WatchInfoCacheDb.put(this._watchId, {videoInfo});
-		let serverType = 'dmc';
-		if (!videoInfo.isDmcAvailable) {
-			serverType = 'smile';
-		} else if (videoInfo.isDmcOnly) {
+		let serverType;
+		let videoQuality;
+		if (!videoInfo.isDomandOnly && this._playerConfig.props.autoDisableNew && videoInfo.maybeBetterQualityServerType === 'dmc') {
 			serverType = 'dmc';
-		} else if (['dmc', 'smile'].includes(this._videoWatchOptions.videoServerType)) {
-			serverType = this._videoWatchOptions.videoServerType;
-		} else if (this._playerConfig.props.videoServerType === 'smile') {
-			serverType = 'smile';
+			videoQuality = this._playerConfig.props.dmcVideoQuality;
+		} else if (videoInfo.isDomandOnly || (this._videoWatchOptions.videoServerType === 'domand' && videoInfo.isDomandAvailable)) {
+			serverType = 'domand';
+			videoQuality = this._playerConfig.props.domandVideoQuality;
+		} else if (videoInfo.isDmcOnly || (this._videoWatchOptions.videoServerType === 'dmc' && videoInfo.isDmcAvailable)) {
+			serverType = 'dmc';
+			videoQuality = this._playerConfig.props.dmcVideoQuality;
 		} else {
-			const disableDmc =
-				this._playerConfig.props.autoDisableDmc &&
-				this._videoWatchOptions.videoServerType !== 'smile' &&
-				videoInfo.maybeBetterQualityServerType === 'smile';
-			serverType = disableDmc ? 'smile' : 'dmc';
+			serverType = 'domand';
+			videoQuality = this._playerConfig.props.domandVideoQuality;
 		}
 		this._state.setState({
+			isDomandAvailable: videoInfo.isDomandAvailable,
 			isDmcAvailable: videoInfo.isDmcAvailable,
 			isCommunity: videoInfo.isCommunityVideo,
 			isMymemory: videoInfo.isMymemory,
@@ -25376,40 +25622,32 @@ class NicoVideoPlayerDialog extends Emitter {
 			isLiked: videoInfo.isLiked
 		});
 		MediaSessionApi.updateByVideoInfo(this._videoInfo);
-		const isHLSRequired = videoInfo.dmcInfo && videoInfo.dmcInfo.isHLSRequired;
+		const isHLSRequired = videoInfo.isHLSRequired;
 		const isHLSSupported = !!global.debug.isHLSSupported ||
-		document.createElement('video').canPlayType('application/x-mpegURL') !== '';
-		const useHLS = isHLSSupported && (isHLSRequired || !this._playerConfig.props['video.hls.enableOnlyRequired']);
-			this._videoSession = await VideoSessionWorker.create({
+			document.createElement('video').canPlayType('application/vnd.apple.mpegURL') !== '' ||
+			document.createElement('video').canPlayType('application/x-mpegURL') !== '';
+		const useHLS = isHLSSupported && (isHLSRequired || !this._playerConfig.props['video.hls.enableOnlyRequired'] || serverType != 'dmc');
+		this._videoSession = await VideoSessionWorker.create({
 			videoInfo,
-			videoQuality: this._playerConfig.props.dmcVideoQuality,
+			videoQuality,
 			serverType,
-			isPlayingCallback: () => this.isPlaying,
-			useWellKnownPort: true,
 			useHLS
 		});
 		if (this._videoFilter.isNgVideo(videoInfo)) {
 			return this._onVideoFilterMatch();
 		}
-		if (this._videoSession.isDmc) {
-			NVWatchCaller.call(videoInfo.dmcInfo.trackingId)
-				.then(() => this._videoSession.connect())
-				.then(sessionInfo => {
-					this.setVideo(sessionInfo.url);
-					videoInfo.setCurrentVideo(sessionInfo.url);
-					this.emit('videoServerType', 'dmc', sessionInfo, videoInfo);
-				})
-				.catch(this._onVideoSessionFail.bind(this));
-		} else {
-			if (this._playerConfig.props.enableVideoSession) {
-				this._videoSession.connect();
+		try {
+			if (this._videoSession.isDmc) {
+				await NVWatchCaller.call(videoInfo.dmcInfo.trackingId)
 			}
-			videoInfo.setCurrentVideo(videoInfo.videoUrl);
-			this.setVideo(videoInfo.videoUrl);
-			this.emit('videoServerType', 'smile', {}, videoInfo);
+			const sessionInfo = await this._videoSession.connect();
+			this.setVideo(sessionInfo.url);
+			videoInfo.setCurrentVideo(sessionInfo.url);
+			this.emit('videoServerType', sessionInfo.type, sessionInfo, videoInfo);
+		} catch (e) {
+			this._onVideoSessionFail(this._videoSession.serverType, e);
 		}
 		this._state.videoInfo = videoInfo;
-		this._state.isDmcPlaying = this._videoSession.isDmc;
 		this.loadComment(videoInfo.msgInfo);
 		this.emit('loadVideoInfo', videoInfo);
 		this.emitResolve('firstVideoInitialized', this._watchId);
@@ -25428,6 +25666,7 @@ class NicoVideoPlayerDialog extends Emitter {
 	}
 	loadComment(msgInfo) {
 		msgInfo.language = this._playerConfig.props.commentLanguage;
+		this._playerConfig.props.commentLanguage = msgInfo.language;
 		this.threadLoader.load(msgInfo).then(
 			this._onCommentLoadSuccess.bind(this, this._requestId),
 			this._onCommentLoadFail.bind(this, this._requestId)
@@ -25463,10 +25702,11 @@ class NicoVideoPlayerDialog extends Emitter {
 			window.setTimeout(() => this.playNextVideo(), 3000);
 		}
 	}
-	_onVideoSessionFail(result) {
-		window.console.error('dmc fail', result);
+	_onVideoSessionFail(serverType, result) {
+		const server = serverType === 'dmc' ? 'dmc.nico' : serverType;
+		window.console.error(`${server} fail`, result);
 		this._setErrorMessage(
-			`動画の読み込みに失敗しました(dmc.nico) ${result && result.message || ''}`, this._watchId);
+			`動画の読み込みに失敗しました(${server}) ${result && result.message || ''}`, this._watchId);
 		this._state.setState({isError: true, isLoading: false});
 		if (this.isPlaylistEnable) {
 			window.setTimeout(() => this.playNextVideo(), 3000);
@@ -25556,18 +25796,9 @@ class NicoVideoPlayerDialog extends Emitter {
 			let option = this._videoWatchOptions.mylistLoadOptions;
 			let query = this._videoWatchOptions.query;
 			option.append = this.isPlaying && this._playlist.isEnable;
-			option.shuffle = parseInt(query.shuffle, 10) === 1;
 			console.log('playlist option:', option);
-			if (query.playlist_type === 'mylist') {
-				this._playlist.loadFromMylist(option.group_id, option, this._videoInfo.msgInfo);
-			} else if (query.playlist_type === 'deflist') {
-				this._playlist.loadFromMylist('deflist', option, this._videoInfo.msgInfo);
-			} else if (query.playlist_type === 'tag' || query.playlist_type === 'search') {
-				let word = query.tag || query.keyword;
-				option.searchType = query.tag ? 'tag' : '';
-				option = Object.assign(option, query);
-				this._playlist.loadSearchVideo(word, option, this._playerConfig.props['search.limit']);
-			}
+			option.limit = this._playerConfig.props['search.limit'];
+			this._playlist.load(query.playlist, option, this._videoInfo.msgInfo);
 			this._playlist.toggleEnable(true);
 		}
 		this._playlist.insertCurrentVideo(this._videoInfo);
@@ -25645,7 +25876,7 @@ class NicoVideoPlayerDialog extends Emitter {
 			}, 3000);
 		};
 		const sessionState = await this._videoSession.getState();
-		const {isDmc, isDeleted, isAbnormallyClosed} = sessionState;
+		const {isDomand, isDmc, isDeleted, isAbnormallyClosed} = sessionState;
 		const videoWatchOptions = this._videoWatchOptions;
 		const code = (e && e.target && e.target.error && e.target.error.code) || 0;
 		window.console.error('VideoError!', code, e, (e.target && e.target.error), {isDeleted, isAbnormallyClosed});
@@ -25655,12 +25886,12 @@ class NicoVideoPlayerDialog extends Emitter {
 			} else {
 				this._setErrorMessage('動画のセッションが切断されました。');
 			}
-		} else if (!isDmc && this._videoInfo.isDmcAvailable) {
-			this._setErrorMessage('SMILE動画の再生に失敗しました。DMC動画に接続します。');
-			retry({economy: false, videoServerType: 'dmc'});
-		} else if (!isDmc && (!this._videoWatchOptions.isEconomySelected && !this._videoInfo.isEconomy)) {
-			this._setErrorMessage('動画の再生に失敗しました。エコノミー動画に接続します。');
-			retry({economy: true, videoServerType: 'smile'});
+		} else if (isDomand && this._videoInfo.isDmcAvailable) {
+			this._setErrorMessage('Domand動画の再生に失敗しました。DMC動画に接続します。');
+			retry({videoServerType: 'dmc'});
+		} else if (isDmc && this._videoInfo.isDomandAvailable) {
+			this._setErrorMessage('DMC動画の再生に失敗しました。Domand動画に接続します。');
+			retry({videoServerType: 'domand'});
 		} else {
 			this._setErrorMessage('動画の再生に失敗しました。');
 		}
@@ -25784,6 +26015,10 @@ class NicoVideoPlayerDialog extends Emitter {
 			language: this._playerConfig.props.commentLanguage
 		});
 		this._commentPanel.on('command', this._onCommand.bind(this));
+		this._commentPanel.on('deleteChat', (e, chat) => {
+			this.removeChat(chat)
+				.then(() => e.resolve());
+		});
 		this._commentPanel.on('update', _.debounce(this._onCommentPanelStatusUpdate.bind(this), 100));
 		this.emitResolve('commentpanel-ready');
 	}
@@ -25895,6 +26130,30 @@ class NicoVideoPlayerDialog extends Emitter {
 		return this.threadLoader.postChat(msgInfo, text, cmd, vpos, lang)
 			.then(onSuccess).catch(onFail);
 	}
+	removeChat(chat) {
+		if (!this._nicoVideoPlayer ||
+			!this.threadLoader ||
+			!this._state.isCommentReady) {
+			return;
+		}
+		if (!util.isLogin()) {
+			return;
+		}
+		window.console.time('コメント削除');
+		const msgInfo = this._videoInfo.msgInfo;
+		return this.threadLoader.deleteChat(msgInfo, chat)
+			.then(result => {
+				window.console.timeEnd('コメント削除');
+				this.execCommand('notify', 'コメント削除成功');
+				this._nicoVideoPlayer.removeChat(chat);
+			})
+			.catch(err => {
+				err = err || {};
+				window.console.log('_onFail: ', err);
+				window.console.timeEnd('コメント削除');
+				this.execCommand('alert', err.message);
+			});
+	}
 	get duration() {
 		if (!this._videoInfo) {
 			return 0;
@@ -25978,7 +26237,6 @@ class VideoHoverMenu {
 		const ul = document.createElement('ul');
 		mylistList.forEach(mylist => {
 			const li = document.createElement('li');
-			li.className = `folder${mylist.icon_id}`;
 			const icon = document.createElement('span');
 			icon.className = 'mylistIcon command';
 			Object.assign(icon.dataset, {
@@ -25987,6 +26245,23 @@ class VideoHoverMenu {
 				command: 'mylistOpen'
 			});
 			icon.title = mylist.name + 'を開く';
+			const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+			svg.setAttribute('viewBox', '0 0 24 24');
+			const folder = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+			folder.setAttribute('d', 'M1 6V5c0-1.1.9-2 2-2h7a2 2 0 011.6.9L13 6h8a2 2 0 012 2v12a2 2 0 01-2 2H3a2 2 0 01-2-2V6z');
+			if (mylist.isPublic) {
+				folder.setAttribute('fill-rule', 'evenodd');
+				svg.append(folder);
+			} else {
+				const graph = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+				graph.setAttribute('fill-rule', 'evenodd');
+				const locked = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+				locked.setAttribute('fill', '#FFF');
+				locked.setAttribute('d', 'M17 13v-.5a1.5 1.5 0 00-3 0v.5h3zm2 0h1.2c.4 0 .8.4.8.9V19c0 .5-.4.9-.9.9H11a.9.9 0 01-.9-.9V14c0-.5.4-.9.9-.9H12v-.5a3.5 3.5 0 117 0v.5zm-3.5 2a1.5 1.5 0 100 3 1.5 1.5 0 000-3z');
+				graph.append(folder, locked);
+				svg.append(graph);
+			}
+			icon.append(svg);
 			const link = document.createElement('a');
 			link.className = 'mylistLink name command';
 			link.textContent = mylist.name;
@@ -26089,7 +26364,7 @@ class VideoHoverMenu {
 		.menuItemContainer {
 			box-sizing: border-box;
 			position: absolute;
-			z-index: ${CONSTANT.BASE_Z_INDEX + 40000};
+			z-index: 40000;
 			overflow: visible;
 			will-change: transform, opacity;
 			user-select: none;
@@ -26404,9 +26679,7 @@ class VideoHoverMenu {
 				width: 18px;
 				height: 14px;
 				margin: -4px 4px 0 0;
-				vertical-align: middle;
 				margin-right: 15px;
-				background: url("//nicovideo.cdn.nimg.jp/uni/img/zero_my/icon_folder_default.png") no-repeat scroll 0 0 transparent;
 				transform: scale(1.5);
 				transform-origin: 0 0 0;
 				transition: transform 0.1s ease, box-shadow 0.1s ease;
@@ -26421,16 +26694,11 @@ class VideoHoverMenu {
 				z-index: 100;
 				opacity: 1;
 			}
-			.mylistSelectMenu .deflist .mylistIcon { background-position: 0 -253px;}
-			.mylistSelectMenu .folder1 .mylistIcon { background-position: 0 -23px;}
-			.mylistSelectMenu .folder2 .mylistIcon { background-position: 0 -46px;}
-			.mylistSelectMenu .folder3 .mylistIcon { background-position: 0 -69px;}
-			.mylistSelectMenu .folder4 .mylistIcon { background-position: 0 -92px;}
-			.mylistSelectMenu .folder5 .mylistIcon { background-position: 0 -115px;}
-			.mylistSelectMenu .folder6 .mylistIcon { background-position: 0 -138px;}
-			.mylistSelectMenu .folder7 .mylistIcon { background-position: 0 -161px;}
-			.mylistSelectMenu .folder8 .mylistIcon { background-position: 0 -184px;}
-			.mylistSelectMenu .folder9 .mylistIcon { background-position: 0 -207px;}
+			.mylistSelectMenu .mylistIcon > svg {
+				fill: #666;
+				width: 100%;
+				height: 100%;
+			}
 			.mylistSelectMenu .name {
 				display: inline-block;
 				width: calc(100% - 20px);
@@ -26504,7 +26772,7 @@ class VideoHoverMenu {
 			font-size: 20px;
 			top: 0;
 			right: 0;
-			z-index: ${CONSTANT.BASE_Z_INDEX + 60000};
+			z-index: 60000;
 			margin: 0 0 40px 40px;
 			color: #ccc;
 			border: solid 1px #888;
@@ -26556,7 +26824,7 @@ class VideoHoverMenu {
 			border-radius: 8px;
 			text-align: center;
 			color: var(--base-fore-color);
-			z-index: ${CONSTANT.BASE_Z_INDEX + 10};
+			z-index: 10;
 			background: rgba(0, 0, 0, 0.8);
 			transition: transform 0.2s ease, box-shadow 0.2s, text-shadow 0.2s, font-size 0.2s;
 			box-shadow: 0 0 2px rgba(255, 255, 192, 0.8);
@@ -26585,13 +26853,10 @@ class VideoHoverMenu {
 	`, {className: 'videoHoverMenu'});
 util.addStyle(`
 	.menuItemContainer.leftBottom {
-		bottom: 64px;
+		bottom: calc(64px * var(--zenza-ui-scale,1));
 	}
 	.menuItemContainer.leftBottom .scalingUI {
 		transform-origin: left bottom;
-	}
-	.menuItemContainer.leftBottom .scalingUI {
-		height: 64px;
 	}
 	.menuItemContainer.rightBottom {
 		bottom: 64px;
@@ -26866,8 +27131,8 @@ class CommentInputPanel extends Emitter {
 			.on('keydown', preventEsc)
 			.on('keyup', preventEsc);
 		$autoPause.prop('checked', config.props.autoPauseCommentInput);
-		this._$autoPause.on('change', () => {
-			config.props.autoPauseCommentInput = !!$autoPause.prop('checked');
+		this._$autoPause.on('change', (ev) => {
+			config.props.autoPauseCommentInput = ev.target.checked;
 			$cmt.focus();
 		});
 		this._$view.find('label').on('click', e => e.stopPropagation());
@@ -26933,7 +27198,7 @@ CommentInputPanel.__css__ = (`
 		box-sizing: border-box;
 		width: 200px;
 		height: 50px;
-		z-index: ${CONSTANT.BASE_Z_INDEX + 30000};
+		z-index: 30000;
 		transform: translate(-50%, -170px);
 		overflow: visible;
 	}
@@ -26946,7 +27211,7 @@ CommentInputPanel.__css__ = (`
 	}
 	.commentInputPanel:focus-within {
 		width: 500px;
-		z-index: ${CONSTANT.BASE_Z_INDEX + 100000};
+		z-index: 100000;
 	}
 	.zenzaScreenMode_wide .commentInputPanel,
 	.is-fullscreen           .commentInputPanel {
@@ -27006,20 +27271,31 @@ CommentInputPanel.__css__ = (`
 		border-radius: 8px;
 		background: #fff;
 		box-shadow: 0 0 8px #fff;
+		color: #000;
+	}
+	.commentInputPanel:focus-within :where(.commandInput, .commentSubmit) {
+		background: #fff;
+		color: #000;
 	}
 	.commentInputPanel .autoPauseLabel {
-		display: none;
-	}
-	.commentInputPanel:focus-within .autoPauseLabel {
 		position: absolute;
-		top: 36px;
+		width: 145px;
+		height: 21px !important;
+		font-size: 13px;
+		top: 9px;
 		left: 50%;
 		transform: translate(-50%, 0);
-		display: block;
 		background: #336;
-		z-index: 100;
+		z-index: -1;
+		opacity: 0;
+		transition: top 0.2s ease, opacity 0.2s ease;
+		text-align: center;
 		color: #ccc;
-		padding: 0 8px;
+	}
+	.commentInputPanel:focus-within .autoPauseLabel {
+		top: 36px;
+		z-index: 100;
+		opacity: 1;
 	}
 	.commandInput {
 		position: absolute;
@@ -27214,7 +27490,7 @@ class TagListView extends BaseViewComponent {
 		}
 		super._onCommand('playlistSetSearchVideo', {word, option});
 	}
-	update({tagList = [], watchId = null, videoId = null, token = null, watchAuthKey = null}) {
+	update({tagList = [], watchId = null, videoId = null, token = null, tagEdit = null}) {
 		if (watchId) {
 			this._watchId = watchId;
 		}
@@ -27224,8 +27500,8 @@ class TagListView extends BaseViewComponent {
 		if (token) {
 			this._token = token;
 		}
-		if (watchAuthKey) {
-			this._watchAuthKey = watchAuthKey;
+		if (tagEdit) {
+			this._tagEdit = tagEdit;
 		}
 		this.setState({
 			isInputing: false,
@@ -27280,13 +27556,13 @@ class TagListView extends BaseViewComponent {
 		const watchId = this._watchId;
 		const videoId = this._videoId;
 		const csrfToken = this._token;
-		const watchAuthKey = this._watchAuthKey;
+		const editKey = this._tagEdit?.editKey;
 		const addTag = () => {
 			return this._tagEditApi.add({
 				videoId,
 				tag,
 				csrfToken,
-				watchAuthKey
+				editKey
 			});
 		};
 		return Promise.all([addTag(), wait3s]).then(results => {
@@ -27309,14 +27585,14 @@ class TagListView extends BaseViewComponent {
 		const watchId = this._watchId;
 		const videoId = this._videoId;
 		const csrfToken = this._token;
-		const watchAuthKey = this._watchAuthKey;
+		const editKey = this._tagEdit?.editKey;
 		const removeTag = () => {
 			return this._tagEditApi.remove({
 				videoId,
 				tag,
 				id: tagId,
 				csrfToken,
-				watchAuthKey
+				editKey
 			});
 		};
 		return Promise.all([removeTag(), wait3s]).then((results) => {
@@ -27338,7 +27614,7 @@ class TagListView extends BaseViewComponent {
 		const watchId = this._watchId;
 		const wait1s = this._makeWait(1000);
 		const load = () => {
-			return this._tagEditApi.load(this._videoId);
+			return this._tagEditApi.load(this._videoId, this._tagEdit.editKey);
 		};
 		return Promise.all([load(), wait1s]).then((results) => {
 			let result = results[0];
@@ -27398,19 +27674,8 @@ class TagListView extends BaseViewComponent {
 		let link = this._createLink(tagName);
 		let search = this._createSearch(tagName);
 		let data = textUtil.escapeHtml(JSON.stringify(tag));
-		let className = (tag.isLocked || tag.isLockedBySystem === 1 || tag.lck === '1')  ? 'tagItem is-Locked' : 'tagItem';
+		let className = tag.isLocked ? 'tagItem is-Locked' : 'tagItem';
 		return `<li class="${className}" data-tag="${data}" data-tag-id="${tagName}">${dic}${del}${link}${search}</li>`;
-	/*
-		let text = tag.tag;
-		let dic = this._createDicIcon(text, !!tag.dic);
-		let del = this._createDeleteButton(tag.tag);
-		let link = this._createLink(text);
-		let search = this._createSearch(text);
-		let data = textUtil.escapeHtml(JSON.stringify(tag));
-		let className = (tag.lock || tag.owner_lock === 1 || tag.lck === '1') ? 'tagItem is-Locked' : 'tagItem';
-		className = (tag.cat) ? `${className} is-Category` : className;
-		return `<li class="${className}" data-tag="${data}" data-tag-id="${tag.tag}">${dic}${del}${link}${search}</li>`;
-*/
 	}
 	_onTagInputKeyDown(e) {
 		if (this._state.isUpdating) {
@@ -28044,7 +28309,7 @@ class VideoInfoPanel extends Emitter {
 			watchId: videoInfo.watchId,
 			videoId: videoInfo.videoId,
 			token: videoInfo.csrfToken,
-			watchAuthKey: videoInfo.watchAuthKey
+			tagEdit: videoInfo.tagEdit,
 		});
 		this._seriesList.textContent = '';
 		if (videoInfo.series) {
@@ -28079,10 +28344,11 @@ class VideoInfoPanel extends Emitter {
 			}
 		}
 		const decorateWatchLink = watchLink => {
-			const videoId = watchLink.textContent.replace('watch/', '');
+			const videoId = watchLink.textContent.replace('watch/', '').replace('shorts/', '');
 			if (
-				!/^(sm|nm|so|)[0-9]+$/.test(videoId) ||
-				!['www.nicovideo.jp'].includes(watchLink.hostname) || !watchLink.pathname.startsWith('/watch/')) {
+				!/^(sm|nm|so|ss)[0-9]+$/.test(videoId) ||
+				!['www.nicovideo.jp'].includes(watchLink.hostname) ||
+				!(watchLink.pathname.startsWith('/watch/') || watchLink.pathname.startsWith('/shorts/'))) {
 				return;
 			}
 			watchLink.classList.add('noHoverMenu');
@@ -28128,6 +28394,18 @@ class VideoInfoPanel extends Emitter {
 				</zenza-mylist-link>`)[0];
 			link.replaceWith(button);
 		};
+		const seriesLink = link => {
+			link.classList.add('seriesLink');
+			const seriesId = link.textContent.split('/')[1];
+			const button = uq(`<zenza-series-link data-series-id="${seriesId}">
+					${link.outerHTML}
+					<zenza-playlist-append
+						class="playlistSetSeries clickable-item" title="プレイリストで開く"
+						data-command="playlistSetSeries" data-param="${seriesId}"
+					>▶</zenza-playlist-append>
+				</zenza-series-link>`)[0];
+			link.replaceWith(button);
+		};
 		const youtube = link => {
 			const btn = uq(`<zentube-button
 				class="zenzaTubeButton"
@@ -28152,6 +28430,8 @@ class VideoInfoPanel extends Emitter {
 				seekTime(a);
 			} else if (/^mylist\//.test(a.textContent)) {
 				mylistLink(a);
+			} else if (/^series\//.test(a.textContent)) {
+				seriesLink(a);
 			} else if (/^https?:\/\/((www\.|)youtube\.com\/watch|youtu\.be)/.test(href)) {
 				youtube(a);
 				this._zenTubeUrl = href;
@@ -28372,7 +28652,7 @@ css.addStyle(`
 		width: 320px;
 		height: 100%;
 		box-sizing: border-box;
-		z-index: ${CONSTANT.BASE_Z_INDEX + 25000};
+		z-index: 25000;
 		background: #333;
 		color: #ccc;
 		overflow-x: hidden;
@@ -28440,10 +28720,15 @@ css.addStyle(`
 	.zenzaWatchVideoInfoPanel .videoDescription .watch:hover {
 		background: #446;
 	}
-	.videoDescription-font {
-		text-shadow: 1px 1px var(--base-description-color, #888);
+	.videoDescription-font[style*="color"] {
+		text-shadow:
+			0 -1px 2px var(--base-description-color, #888),
+			1px 0 2px var(--base-description-color, #888),
+			0 1px 2px var(--base-description-color, #888),
+			-1px 0 2px var(--base-description-color, #888);
 	}
-	.zenzaWatchVideoInfoPanel .videoDescription .mylistLink {
+	.zenzaWatchVideoInfoPanel .videoDescription .mylistLink,
+	.zenzaWatchVideoInfoPanel .videoDescription .seriesLink {
 		white-space: nowrap;
 		display: inline-block;
 	}
@@ -28456,6 +28741,7 @@ css.addStyle(`
 	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistAppend,
 	.zenzaWatchVideoInfoPanel .videoInfoTab .deflistAdd,
 	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistSetMylist,
+	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistSetSeries,
 	.zenzaWatchVideoInfoPanel .videoInfoTab .pocket-info,
 	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistSetUploadedVideo {
 		display: inline-block;
@@ -28503,6 +28789,7 @@ css.addStyle(`
 	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistAppend:hover,
 	.zenzaWatchVideoInfoPanel .videoInfoTab .deflistAdd:hover,
 	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistSetMylist:hover,
+	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistSetSeries:hover,
 	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistSetUploadedVideo:hover {
 		transform: scale(1.5);
 	}
@@ -28510,6 +28797,7 @@ css.addStyle(`
 	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistAppend:active,
 	.zenzaWatchVideoInfoPanel .videoInfoTab .deflistAdd:active,
 	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistSetMylist:active,
+	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistSetSeries:active,
 	.zenzaWatchVideoInfoPanel .videoInfoTab .playlistSetUploadedVideo:active {
 		transform: scale(1.2);
 		border: 1px inset;
@@ -28870,7 +29158,7 @@ css.addStyle(`
 				left: 0;
 				width: 100%;
 				height: ${CONSTANT.BOTTOM_PANEL_HEIGHT}px;
-				z-index: ${CONSTANT.BASE_Z_INDEX + 20000};
+				z-index: 20000;
 			}
 			.zenzaScreenMode_normal .ZenzaIchibaItemView {
 				margin: 8px 8px 96px;
@@ -28894,7 +29182,7 @@ css.addStyle(`
 				left: 0;
 				width: 100%;
 				height: ${CONSTANT.BOTTOM_PANEL_HEIGHT}px;
-				z-index: ${CONSTANT.BASE_Z_INDEX + 20000};
+				z-index: 20000;
 			}
 			.zenzaScreenMode_big .ZenzaIchibaItemView {
 				margin: 8px 8px 96px;
@@ -28993,6 +29281,15 @@ class VideoHeaderPanel extends Emitter {
 			classList.toggle('is-fullscreen', isFull);
 			classList.toggle('is-notFullscreen', !isFull);
 		});
+		new MutationObserver((mutationList) => {
+			for (const mutation of mutationList) {
+				if (mutation.type !== 'attributes') return;
+				if (mutation.attributeName !== 'data-screen-mode') return;
+				this._resetHeight();
+				window.setTimeout(() => this._onResize(), 1000);
+				break;
+			}
+		}).observe(window.document.body, {attributes: true});
 		window.addEventListener('resize', _.debounce(this._onResize.bind(this), 500));
 	}
 	update(videoInfo) {
@@ -29005,7 +29302,7 @@ class VideoHeaderPanel extends Emitter {
 			watchId,
 			videoId: videoInfo.videoId,
 			token: videoInfo.csrfToken,
-			watchAuthKey: videoInfo.watchAuthKey
+			tagEdit: videoInfo.tagEdit,
 		});
 		this._relatedInfoMenu.update(videoInfo);
 		const classList = this.classList;
@@ -29020,18 +29317,25 @@ class VideoHeaderPanel extends Emitter {
 		} else {
 			this._seriesCover.removeAttribute('style');
 		}
+		this._resetHeight();
 		window.setTimeout(() => this._onResize(), 1000);
 	}
 	updateVideoCount(...args) {
 		this._videoMetaInfo.updateVideoCount(...args);
 	}
+	_resetHeight() {
+		this._height = undefined;
+	}
 	_onResize() {
 		const view = this._$view[0];
 		const rect = view.getBoundingClientRect();
 		const isOnscreen = this.classList.contains('is-onscreen');
-		const height = rect.bottom - rect.top;
+		const height = this._height ?? (rect.bottom - rect.top);
+		if (!this._height && !isOnscreen) {
+			this._height = height;
+		}
 		const top = isOnscreen ? (rect.top - height) : rect.top;
-		this.classList.toggle('is-onscreen', top < -32);
+		this.classList.toggle('is-onscreen', top < -20);
 	}
 	appendTo(node) {
 		this._initializeDom();
@@ -29119,15 +29423,11 @@ css.addStyle(`
 			opacity: 1;
 			transition: 0.5s opacity;
 		}
-		.zenzaWatchVideoHeaderPanel.is-onscreen .videoTagsContainer {
+		.zenzaWatchVideoHeaderPanel.is-onscreen:not(:hover) .videoTagsContainer {
 			display: none;
-			width: calc(100% - 240px);
-		}
-		.zenzaWatchVideoHeaderPanel.is-onscreen:hover .videoTagsContainer {
-			display: block;
 		}
 		.zenzaWatchVideoHeaderPanel.is-onscreen .videoTitleContainer {
-			width: calc(100% - 180px);
+			width: calc(100% - 220px);
 		}
 		.zenzaWatchVideoInfoPanelFoot {
 			background: #222;
@@ -29152,22 +29452,18 @@ css.addStyle(`
 		opacity: 1;
 		transition: 0.5s opacity;
 	}
-	.is-open .videoTagsContainer {
+	.is-open .zenzaWatchVideoHeaderPanel:not(:hover) .videoTagsContainer {
 		display: none;
-		width: calc(100% - 240px);
-	}
-	.is-open .zenzaWatchVideoHeaderPanel:hover .videoTagsContainer {
-		display: block;
 	}
 	.is-open .zenzaWatchVideoHeaderPanel .videoTitleContainer {
-		width: calc(100% - 180px);
+		width: calc(100% - 220px);
 	}
 `, {className: 'screenMode for-full videoHeaderPanel', disabled: true});
 VideoHeaderPanel.__css__ = (`
 		.zenzaWatchVideoHeaderPanel {
 			position: absolute;
 			width: calc(100%);
-			z-index: ${CONSTANT.BASE_Z_INDEX + 30000};
+			z-index: 30000;
 			box-sizing: border-box;
 			padding: 8px 8px 0;
 			bottom: calc(100% + 8px);
@@ -29184,7 +29480,7 @@ VideoHeaderPanel.__css__ = (`
 		}
 		.zenzaScreenMode_sideView .zenzaWatchVideoHeaderPanel,
 		.zenzaWatchVideoHeaderPanel.is-fullscreen {
-			z-index: ${CONSTANT.BASE_Z_INDEX + 20000};
+			z-index: 20000;
 		}
 		.zenzaWatchVideoHeaderPanel {
 			pointer-events: none;
@@ -29250,7 +29546,7 @@ VideoHeaderPanel.__css__ = (`
 		}
 		.zenzaWatchVideoHeaderPanel:focus-within,
 		.zenzaWatchVideoHeaderPanel.is-relatedMenuOpen {
-			z-index: ${CONSTANT.BASE_Z_INDEX + 50000};
+			z-index: 50000;
 		}
 		.zenzaWatchVideoHeaderPanel .series-thumbnail-cover {
 			position: absolute;
@@ -29316,6 +29612,7 @@ class VideoSearchForm extends Emitter {
 		this._form.addEventListener('submit', this._onSubmit.bind(this));
 		const config = this._config;
 		const form = this._form;
+		config.props.ownerOnly = false;
 		form['ownerOnly'].checked = config.props.ownerOnly;
 		const confMode = config.props.mode;
 		if (typeof confMode === 'string' && ['tag', 'keyword'].includes(confMode)) {
@@ -29450,7 +29747,10 @@ VideoSearchForm.__css__ = (`
 			width: 248px;
 			z-index: 1000;
 		}
-		.zenzaScreenMode_normal .zenzaWatchVideoHeaderPanel.is-onscreen .zenzaVideoSearchPanel,
+		.zenzaScreenMode_normal .zenzaWatchVideoHeaderPanel.is-onscreen .zenzaVideoSearchPanel {
+			top: 36px;
+			right: -24px;
+		}
 		.zenzaScreenMode_big    .zenzaWatchVideoHeaderPanel.is-onscreen .zenzaVideoSearchPanel,
 		.zenzaScreenMode_3D    .zenzaVideoSearchPanel,
 		.zenzaScreenMode_wide  .zenzaVideoSearchPanel,
@@ -29461,7 +29761,7 @@ VideoSearchForm.__css__ = (`
 			background: rgba(50, 50, 50, 0.8);
 		}
 		.zenzaVideoSearchPanel:not(:focus-within) .focusOnly {
-			display: none;
+			opacity: 0;
 		}
 		.zenzaVideoSearchPanel .searchInputHead {
 			position: absolute;
@@ -29490,6 +29790,7 @@ VideoSearchForm.__css__ = (`
 		.zenzaVideoSearchPanel .searchModeLabel span {
 				display: inline-block;
 				padding: 4px 8px;
+				line-height: 1;
 				color: #666;
 				cursor: pointer;
 				border-radius: 8px;
@@ -29508,7 +29809,7 @@ VideoSearchForm.__css__ = (`
 			}
 		.zenzaVideoSearchPanel .searchWord {
 			white-space: nowrap;
-			padding: 4px;
+			padding: 0 4px;
 		}
 			.zenzaVideoSearchPanel .searchWordInput {
 				width: 200px;
@@ -29594,7 +29895,6 @@ VideoSearchForm.__css__ = (`
 		.zenzaVideoSearchPanel .searchInputFoot {
 			white-space: nowrap;
 			position: absolute;
-			padding: 4px 0;
 			opacity: 0;
 			padding: 4px;
 			pointer-events: none;
@@ -29613,12 +29913,16 @@ VideoSearchForm.__css__ = (`
 				background: #333;
 				color: #ccc;
 			}
-			.zenzaVideoSearchPanel .autoPauseLabel {
+			.zenzaVideoSearchPanel .ownerOnlyLabel {
 				cursor: pointer;
 			}
-			.zenzaVideoSearchPanel .autoPauseLabel input + span {
+			.zenzaVideoSearchPanel .ownerOnlyLabel input + span {
 				display: inline-block;
 				pointer-events: none;
+			}
+			.zenzaVideoSearchPanel .ownerOnlyLabel input[disabled] + span {
+				filter: brightness(80%);
+				text-decoration: line-through;
 			}
 	`).trim();
 VideoSearchForm.__tpl__ = (`
@@ -29668,8 +29972,8 @@ VideoSearchForm.__tpl__ = (`
 						<option value="l">長い順</option>
 						<option value="l,a">短い順</option>
 					</select>
-					<label class="autoPauseLabel">
-						<input type="checkbox" name="ownerOnly" checked="checked">
+					<label class="ownerOnlyLabel">
+						<input type="checkbox" name="ownerOnly" checked="checked" disabled>
 						<span>投稿者の動画のみ</span>
 					</label>
 				</div>
@@ -30264,7 +30568,7 @@ class RelatedInfoMenu extends BaseViewComponent {
 		this._ginzaLink.setAttribute('href', `//www.nicovideo.jp/watch/${wid}`);
 		this._originalLink.setAttribute('href', `//www.nicovideo.jp/watch/${vid}`);
 		this._twitterLink.setAttribute('href', `https://twitter.com/hashtag/${vid}`);
-		this._parentVideoLink.setAttribute('href', `//commons.nicovideo.jp/tree/${vid}`);
+		this._parentVideoLink.setAttribute('href', `//commons.nicovideo.jp/works/${vid}`);
 		this.emit('close');
 	}
 	_onCommand(command, param) {
@@ -30449,7 +30753,7 @@ class VideoMetaInfo extends BaseViewComponent {
 		});
 	}
 	update(videoInfo) {
-		this._elm.postedAt.textContent = videoInfo.postedAt;
+		this._elm.postedAt.textContent = new Date(videoInfo.postedAt).toLocaleString();
 		const count = videoInfo.count;
 		this.updateVideoCount(count);
 	}
@@ -30567,7 +30871,7 @@ class HoverMenu {
 		return this._playerPromise;
 	}
 	_closest(target) {
-		return target.closest('a[href*="watch/"],a[href*="nico.ms/"],.UadVideoItem-link');
+		return target.closest('a[href*="watch/"],a[href*="shorts/"],a[href*="nico.ms/"],.UadVideoItem-link');
 	}
 	_onHover (e) {
 		const target = this._closest(e.target);
@@ -30645,63 +30949,146 @@ class HoverMenu {
 		ZenzaWatch.external.send(watchId, Object.assign({query: this._query}, params));
 	}
 	_overrideWatchLink () {
-		if (!!document.querySelector('.UserPageHeader')) {
+		let userPageIntercept;
+		if (document.querySelector('.UserPageHeader') != null) {
 			console.nicoru('user page');
 			const blockNavigation = e => {
 				if (e.ctrlKey) { return; }
 				e.preventDefault();
 			};
-			uq('body').on('mouseover', e => {
-					const target = e.target;
-					if (target.tagName !== 'A' || !target.closest('.NicorepoItem_video')) {
-						return;
-					}
-					target.removeEventListener('click', blockNavigation);
-					target.addEventListener('click', blockNavigation);
+			userPageIntercept = e => {
+				const target = e.target;
+				if (target.tagName !== 'A' || !target.closest('.TimelineItem_video,.TimelineItem_shortVideo')) {
+					return;
+				}
+				target.removeEventListener('click', blockNavigation);
+				target.addEventListener('click', blockNavigation);
+			}
+		}
+		const requireIntercepts = [];
+		if (location.pathname.startsWith('/ranking') || location.pathname.startsWith('/search') || location.pathname.startsWith('/tag')) {
+			console.nicoru('ranking/search/tag page');
+			requireIntercepts.push(e => {
+				const target = e.target.closest('button');
+				return target != null && this._closest(target) != null;
 			});
 		}
-		uq('body').on('click', e => {
-			if (e.ctrlKey) {
-				return;
-			}
+		const onClick = e => {
+			if (e.ctrlKey) { return; }
 			const target = this._closest(e.target);
 			if (!target || target.classList.contains('noHoverMenu')) {
 				return;
 			}
-			if (target.closest('.NicorepoItem_video')) {
-				e.stopPropagation();
-			}
 			let href = target.dataset.href || target.href;
 			let watchId = nicoUtil.getWatchId(href);
-			let host = target.hostname;
-			if (!['www.nicovideo.jp', 'sp.nicovideo.jp', 'nico.ms'].includes(host)) {
-				return;
-			}
-			this._query = nicoUtil.parseWatchQuery((target.search || '').substr(1));
 			if (!watchId || !watchId.match(/^[a-z0-9]+$/)) {
 				return;
 			}
 			if (watchId.startsWith('lv')) {
 				return;
 			}
+			if (target.closest('.TimelineItem_video,.TimelineItem_shortVideo')) {
+				e.stopPropagation();
+			}
 			e.preventDefault();
+			this._query = nicoUtil.parseWatchQuery((target.search || '').substr(1));
 			if (e.shiftKey) {
 				this._send(watchId);
 			} else {
 				this._open(watchId);
 			}
 			window.setTimeout(() => ZenzaWatch.emitter.emit('hideHover'), 1500);
+		};
+		uq('body').on('mouseover', e => {
+			userPageIntercept?.(e);
+			const target = this._closest(e.target);
+			if (!target || target.classList.contains('noHoverMenu')) {
+				return;
+			}
+			let host = target.hostname;
+			if (!['www.nicovideo.jp', 'sp.nicovideo.jp', 'nico.ms'].includes(host)) {
+				return;
+			}
+			target.removeEventListener('click', onClick);
+			if (requireIntercepts.length > 0 && requireIntercepts.some(f => f(e))) {
+				return;
+			}
+			target.addEventListener('click', onClick);
 		});
 	}
 }
-	const isOverrideGinza = () => {
+	const overrideGinza = async (dialog, query) => {
 		if (window.name === 'watchGinza') {
+			window.name = '';
+			return;
+		}
+		if (!Config.props.overrideGinza) {
+			return
+		}
+		initializeGinzaSlayer(dialog, query);
+		await uq.complete();
+		const stopPlayer = (ev) => {
+			if (!document.body.classList.contains('showNicoVideoPlayerDialog')) return;
+			if (/(^|[^\w])zenzaScreenMode_(small|sideView)([^\w]|$)/.test(document.body.className)) return;
+			ev.target.pause();
+		};
+		const video = document.querySelector('.grid-area_\\[player\\] video');
+		if (video !== null) {
+			video.addEventListener('play', stopPlayer);
+			video.pause();
+			return;
+		}
+		new MutationObserver((records, observer) => {
+			for (const record of records) {
+				if(record.addedNodes.length === 0) {
+					continue;
+				}
+				const video = record.target.querySelector('.grid-area_\\[player\\] video');
+				if (video === null) {
+					continue;
+				}
+				video.addEventListener('play', stopPlayer);
+				video.pause();
+				observer.disconnect();
+			}
+		}).observe(document.getElementById('root'), {
+			childList: true,
+			subtree: true,
+		});
+	};
+	const readyContent = () => {
+		if (document.querySelector('[aria-label="nicovideo-content"]') != null) {
+			return Promise.resolve();
+		}
+		const {promise, resolve} = Promise.withResolvers();
+		new MutationObserver((records, observer) => {
+			for (const record of records) {
+				if(record.addedNodes.length === 0 || document.querySelector('[aria-label="nicovideo-content"]') == null) {
+					continue;
+				}
+				resolve();
+				observer.disconnect();
+			}
+		}).observe(document.getElementById('root'), {
+			childList: true,
+		});
+		return promise;
+	}
+	const isWatchPage = async () => {
+		if (!util.isGinzaWatchUrl()) {
 			return false;
 		}
-		if (Config.props.overrideGinza && nicoUtil.isZenzaPlayableVideo()) {
-			return true;
+		const res = document.querySelector('meta[name="server-response"]')?.getAttribute('content');
+		if (res == null) {
+			await readyContent();
+			return !!document.querySelector('.grid-area_\\[player\\]');
 		}
-		return false;
+		const json = JSON.parse(res);
+		if (json.meta.status > 299) {
+			return false;
+		}
+		return (typeof json.data.response.okReason === 'string')
+			|| (typeof json.data.response.$watchV4.data.okReason === 'string');
 	};
 	const initWorker = () => {
 		if (!location.host.endsWith('.nicovideo.jp')) { return; }
@@ -30771,34 +31158,32 @@ const replaceRedirectLinks = async () => {
 			}).observe(container, {childList: true});
 		});
 	}
-	if (location.host === 'www.nicovideo.jp' && nicoUtil.getMypageVer() === 'spa') {
+	if (location.host === 'www.nicovideo.jp' && nicoUtil.getMypageVer() === 'spa' &&
+		(location.pathname.indexOf('/user/') === 0 || location.pathname.indexOf('/my') === 0)) {
 		await uq.ready(); // DOMContentLoaded
-		let shuffleButton;
-		const query = '.ContinuousPlayButton';
-		const addShufflePlaylistLink = async () => {
-			const lp = location.pathname;
-			if (!lp.startsWith('/my/watchlater') && !lp.includes('/mylist')) {
-				return;
-			}
-			if (shuffleButton && shuffleButton[0].parentNode && shuffleButton[0].parentNode.parentNode) {
-				return;
-			}
-			const $a = uq(query);
-			if (!$a.length) {
-				return false;
-			}
-			if (!shuffleButton) {
-				const $shuffle = uq.html($a[0].outerHTML).text('シャッフル再生')
-					.addClass('zenzaPlaylistShuffleStart');
-				shuffleButton = $shuffle;
-			}
-			const mylistId = lp.replace(/^.*\//, '');
-			const playlistType = mylistId ? 'mylist' : 'deflist';
-			shuffleButton.attr('href', $a[0].href + '&shuffle=1');
-			$a.before(shuffleButton);
-			return true;
+		const createShuffleButton = (continuous) => {
+			let shuffle = continuous.cloneNode(true);
+			shuffle.classList.add('zenzaPlaylistShuffleStart');
+			shuffle.innerText = 'シャッフル再生';
+			shuffle.href += '&shuffle=1';
+			continuous.after(shuffle);
 		};
-		setInterval(addShufflePlaylistLink, 1000);
+		const observer = new MutationObserver((mutationList, observer) => {
+			let shuffle = document.querySelector('.zenzaPlaylistShuffleStart');
+			if (shuffle) {
+				return;
+			}
+			let continuous = document.querySelector('.ContinuousPlayButton');
+			if (continuous) {
+				createShuffleButton(continuous);
+				return;
+			}
+		});
+		let continuous = document.querySelector('.ContinuousPlayButton');
+		if (continuous) {
+			createShuffleButton(continuous);
+		}
+		observer.observe(document.querySelector('.UserPage-main'), {childList: true, subtree: true});
 	}
 	if (location.host === 'www.nicovideo.jp' &&
 		(location.pathname.indexOf('/search/') === 0 || location.pathname.indexOf('/tag/') === 0)) {
@@ -30823,6 +31208,38 @@ const replaceRedirectLinks = async () => {
 					.find('a[data-link]').attr('href', `//www.nicovideo.jp/watch/${videoId}`);
 			});
 		}, 3000);
+	}
+	if (location.host === 'www.nicovideo.jp' && location.pathname.indexOf('/series/') === 0) {
+		const firstVideo = document.querySelector('.NC-Link.NC-MediaObject-contents');
+		if (!firstVideo) { return; }
+		const autoPlayButton = document.createElement('a');
+		autoPlayButton.classList.add('ContinuousPlayButton');
+		autoPlayButton.innerText = '連続再生';
+		autoPlayButton.href = (firstVideo.dataset.href ?? firstVideo.href) + '&continuous=1';
+		Object.assign(autoPlayButton.style, {
+			alignItems: 'center',
+			background: '#fff',
+			border: '2px solid #eee',
+			borderRadius: '4px',
+			color: '#555',
+			display: 'flex',
+			fontSize: '12px',
+			height: '32px',
+			padding: '0 8px',
+		});
+		const shuffleButton = autoPlayButton.cloneNode(true);
+		shuffleButton.classList.add('zenzaPlaylistShuffleStart');
+		shuffleButton.href += '&shuffle=1';
+		shuffleButton.innerText = 'シャッフル再生';
+		const seriesPlayButtons = document.createElement('div');
+		seriesPlayButtons.append(autoPlayButton, shuffleButton);
+		seriesPlayButtons.classList.add('SeriesPlayMenu');
+		Object.assign(seriesPlayButtons.style, {
+			display: 'flex',
+			marginTop: '8px',
+			gap: '8px',
+		});
+		document.querySelector('.SeriesDetailContainer').append(seriesPlayButtons)
 	}
 	if (location.host === 'ch.nicovideo.jp') {
 		uq('#sec_current a.item').closest('li').forEach(li => {
@@ -30860,9 +31277,10 @@ const replaceRedirectLinks = async () => {
 		replaceRedirectLinks();
 		const query = textUtil.parseQuery(START_PAGE_QUERY);
 		await uq.ready(); // DOMContentLoaded
-		const isWatch = util.isGinzaWatchUrl() &&
-			(!!document.getElementById('watchAPIDataContainer') ||
-				!!document.getElementById('js-initial-watch-data'));
+		const isWatch = await isWatchPage();
+		if (typeof Config.props.commentLanguage === 'string') {
+			Config.props.commentLanguage = Config.props.commentLanguage.replace('_', '-').toLowerCase();
+		}
 		const hoverMenu = global.debug.hoverMenu = new HoverMenu({playerConfig: Config});
 		await Promise.all([
 			NicoComment.offscreenLayer.get(Config),
@@ -30873,12 +31291,7 @@ const replaceRedirectLinks = async () => {
 		const dialog = initializeDialogPlayer(Config);
 		hoverMenu.setPlayer(dialog);
 		if (isWatch) {
-			if (isOverrideGinza()) {
-				initializeGinzaSlayer(dialog, query);
-			}
-			if (window.name === 'watchGinza') {
-				window.name = '';
-			}
+			await overrideGinza(dialog, query);
 		}
 		initializeMessage(dialog);
 		WatchPageHistory.initialize(dialog);
@@ -31760,9 +32173,9 @@ const workerUtil = (() => {
 					case 'commandResult':
 						if (promises[sessionId]) {
 							if (status === 'ok') {
-									promises[sessionId].resolve(params.result);
+								promises[sessionId].resolve(params.result);
 							} else {
-								promises[sessionId].reject(params.result);
+								promises[sessionId].reject(new Error(params.result));
 							}
 							delete promises[sessionId];
 						}
@@ -31923,6 +32336,7 @@ const workerUtil = (() => {
 			function (self) {
 			let config = {}, PRODUCT, TOKEN, CONSTANT, NAME = decodeURI('${encodeURI(name)}'), bcast = {}, portMap = {};
 			const {Handler, PromiseHandler, Emitter} = (${EmitterInitFunc.toString()})();
+			${options.inject ?? ''}
 			(${func.toString()})(self);
 			//===================================
 			(${messageWrapper.toString()})(self);
@@ -31943,7 +32357,7 @@ const workerUtil = (() => {
 								if (status === 'ok') {
 									promises[sessionId].resolve(params.result);
 								} else {
-									promises[sessionId].reject(params.result);
+									promises[sessionId].reject(new Error(params.result));
 								}
 								delete promises[sessionId];
 							}
@@ -32301,7 +32715,7 @@ const WatchInfoCacheDb = (() => {
 		return instance = {
 			async put(watchId, options = {}) {
 				const videoInfo = options.videoInfo || null;
-				const videoInfoRawData = (videoInfo && videoInfo.getData) ? videoInfo.getData() : videoInfo;
+				const videoInfoRawData = (videoInfo && videoInfo.toJSON) ? videoInfo.toJSON() : videoInfo;
 				const cache = await this.get(watchId) || {};
 				const now = Date.now();
 				const videoId = videoInfo ? videoInfo.videoId : watchId;
@@ -32313,8 +32727,7 @@ const WatchInfoCacheDb = (() => {
 				typeof options.currentTime === 'number' && options.currentTime > 0 &&
 					(resume.unshift({now, time: options.currentTime}));
 				resume.length = Math.min(10, resume.length);
-				const ownerId = videoInfo && videoInfo.owner.id ?
-					`${videoInfo.isChannel? 'ch' : 'user/'}${videoInfo.owner.id}` : '';
+				const ownerId = videoInfo?.owner.linkId ?? '';
 				const comment = cache.comment || [];
 				options.comment && (comment.push(comment));
 				const record = {
@@ -32508,15 +32921,16 @@ const VideoSessionWorker = (() => {
 		const DMC_HEART_BEAT_INTERVAL_MS = 30 * 1000;      // 30sec
 		const SESSION_CLOSE_FAIL_COUNT = 3;
 		const VIDEO_QUALITY = {
-			auto: /.*/,
-			veryhigh: /_(1080p)$/,
-			high: /_(720p)$/,
-			mid: /_(540p|480p)$/,
-			low: /_(360p)$/
+			auto: "auto",
+			veryhigh: "1080p",
+			high: "720p",
+			mid: "480p",
+			low: "360p",
+			verylow: "低画質",
 		};
 		const util = {
 			fetch(url, params = {}) { // ブラウザによっては location.origin は 'blob:' しか入らない
-				if (!location.origin.endsWith('.nicovideo.jp') && !/^blob:https?:\/\/[a-z0-9]+\.nicovideo\.jp\//.test(location.href)) {
+				if (!location.origin.endsWith('.nicovideo.jp') && !new RegExp('^blob:https?://[a-z0-9]+\\.nicovideo\\.jp/').test(location.href)) {
 					return self.xFetch(url, params);
 				}
 				const racers = [];
@@ -32553,28 +32967,20 @@ const VideoSessionWorker = (() => {
 			}
 			toString() {
 				let dmcInfo = this._dmcInfo;
-				let videos = [];
-				let availableVideos =
-						dmcInfo.videos.filter(v => v.isAvailable)
-								.sort((a, b) => b.levelIndex - a.levelIndex);
-				let reg = VIDEO_QUALITY[this._videoQuality] || VIDEO_QUALITY.auto;
-				if (reg === VIDEO_QUALITY.auto) {
-					videos = availableVideos.map(v => v.id);
+				const label = VIDEO_QUALITY[this._videoQuality] || VIDEO_QUALITY.auto;
+				let videos;
+				if (label === VIDEO_QUALITY.auto) {
+					videos = dmcInfo.availableVideoIds;
 				} else {
-					availableVideos.forEach(format => {
-						if (reg.test(format.id)) {
-							videos.push(format.id);
-						}
-					});
-					if (videos.length < 1) {
-						videos[0] = availableVideos[0].id;
-					}
+					const { availableVideos } = dmcInfo;
+					const video = availableVideos.find(v => label === v.metadata.label) ?? availableVideos[0];
+					videos = [video.id]
 				}
-				let audios = [dmcInfo.audios[0]];
+				const audio = dmcInfo.availableAudioIds[0];
 				let contentSrcIdSets =
-					(this._useHLS && reg === VIDEO_QUALITY.auto) ?
-						this._buildAbrContentSrcIdSets(videos, audios) :
-						this._buildContentSrcIdSets(videos, audios);
+					(this._useHLS && label === VIDEO_QUALITY.auto)
+					? this._buildAbrContentSrcIdSets(videos, audio)
+					: this._buildContentSrcIdSets(videos, audio);
 				let http_parameters = {};
 				let parameters = {
 					use_ssl: this._useSSL ? 'yes' : 'no',
@@ -32604,7 +33010,7 @@ const VideoSessionWorker = (() => {
 						},
 						content_auth: {
 							auth_type: dmcInfo.authTypes[this._useHLS ? 'hls' : 'http'] || 'ht2',
-							content_key_timeout: 600 * 1000,
+							content_key_timeout: dmcInfo.contentKeyTimeout,
 							service_id: 'nicovideo',
 							service_user_id: dmcInfo.serviceUserId,
 						},
@@ -32613,7 +33019,7 @@ const VideoSessionWorker = (() => {
 						content_type: 'movie',
 						content_uri: '',
 						keep_method: {
-							heartbeat: {lifetime: dmcInfo.heartBeatLifeTimeMs}
+							heartbeat: {lifetime: dmcInfo.heartbeatLifetime}
 						},
 						priority: dmcInfo.priority,
 						protocol: {
@@ -32632,13 +33038,13 @@ const VideoSessionWorker = (() => {
 				};
 				return JSON.stringify(request, null, 2);
 			}
-			_buildContentSrcIdSets(videos, audios) {
+			_buildContentSrcIdSets(videos, audio) {
 				return [
 					{
 						content_src_ids: [
 							{
 								src_id_to_mux: {
-									audio_src_ids: audios,
+									audio_src_ids: [audio],
 									video_src_ids: videos
 								}
 							}
@@ -32646,13 +33052,13 @@ const VideoSessionWorker = (() => {
 					}
 				];
 			}
-			_buildAbrContentSrcIdSets(videos, audios) {
+			_buildAbrContentSrcIdSets(videos, audio) {
 				const v = videos.concat();
 				const contentSrcIds = [];
 				while (v.length > 0) {
 					contentSrcIds.push({
 						src_id_to_mux: {
-							audio_src_ids: [audios[0]],
+							audio_src_ids: [audio],
 							video_src_ids: v.concat()
 						}
 					});
@@ -32662,33 +33068,36 @@ const VideoSessionWorker = (() => {
 			}
 		}
 		class VideoSession {
-			static create(params) {
-				if (params.serverType === 'dmc') {
-					return new DmcSession(params);
-				} else {
-					return new SmileSession(params);
+			static create({serverType, ...params}) {
+				switch (serverType) {
+					case 'domand':
+						return new DomandSession(params);
+					case 'dmc':
+						return new DmcSession(params);
+					default:
+						throw new Error('Unknown server type');
 				}
 			}
-			constructor(params) {
-				this._videoInfo = params.videoInfo;
-				this._dmcInfo = params.dmcInfo;
+			constructor({videoInfo, videoQuality, useHLS}) {
+				this._videoInfo = videoInfo;
 				this._isPlaying = () => true;
 				this._pauseCount = 0;
 				this._failCount = 0;
 				this._lastResponse = '';
-				this._videoQuality = params.videoQuality || 'auto';
+				this._videoQuality = videoQuality || 'auto';
 				this._videoSessionInfo = {};
 				this._isDeleted = false;
 				this._isAbnormallyClosed = false;
 				this._heartBeatTimer = null;
-				this._useSSL = !!params.useSSL;
+				this._useSSL = true;
+				this._useHLS = !!useHLS;
 				this._useWellKnownPort = true;
 				this._onHeartBeatSuccess = this._onHeartBeatSuccess.bind(this);
 				this._onHeartBeatFail = this._onHeartBeatFail.bind(this);
 			}
-			connect() {
+			async connect() {
 				this._createdAt = Date.now();
-				return this._createSession(this._videoInfo, this._dmcInfo);
+				return await this._createSession();
 			}
 			enableHeartBeat() {
 				this.disableHeartBeat();
@@ -32723,38 +33132,143 @@ const VideoSessionWorker = (() => {
 					this.close();
 				}
 			}
-			close() {
+			async close() {
 				this._isClosed = true;
 				this.disableHeartBeat();
-				return this._deleteSession();
+				return await this._deleteSession();
+			}
+			get serverType() {
+				return 'unknown';
+			}
+			get info() {
+				return {...this._videoSessionInfo, type: this.serverType};
+			}
+			set info({ url, sessionId, video, audioFormat, heartBeatUrl, deleteSessionUrl, lastResponse }) {
+				this._videoSessionInfo = {
+					url,
+					sessionId,
+					video,
+					audioFormat,
+					heartBeatUrl,
+					deleteSessionUrl,
+					lastResponse
+				};
+			}
+			get isDomand() {
+				return this.serverType === 'domand';
+			}
+			get isDmc() {
+				return this.serverType === 'dmc';
 			}
 			get isDeleted() {
 				return !!this._isDeleted;
-			}
-			get isDmc() {
-				return this._serverType === 'dmc';
 			}
 			get isAbnormallyClosed() {
 				return this._isAbnormallyClosed;
 			}
 		}
+		class DomandSession extends VideoSession {
+			constructor(params) {
+				super(params);
+				this._expireTime = new Date();
+				this._domandInfo = this._videoInfo.domandInfo;
+			}
+			async _createSession() {
+				console.time('create Domand session');
+				if (!this._useHLS) {
+					throw new Error('HLSに未対応');
+				}
+				const { availableVideos } = this._domandInfo;
+				const audioFormat = this._domandInfo.availableAudioIds[0];
+				let videos, videoFormat, videoLabel;
+				if (this._videoQuality === 'auto') {
+					videos = this._domandInfo.availableVideoIds;
+					const { id, label } = availableVideos[0];
+					videoFormat = id;
+					videoLabel = label;
+				} else {
+					const video = availableVideos.find(v => v.label === this._videoQuality) ?? availableVideos[0];
+					videoFormat = video.id;
+					videoLabel = video.label;
+					videos = [videoFormat];
+				}
+				const query = new URLSearchParams({ actionTrackId: this._videoInfo.actionTrackId });
+				const url = `https://nvapi.nicovideo.jp/v1/watch/${this._domandInfo.videoId}/access-rights/hls?${query.toString()}`;
+				const result = await util.fetch(url, {
+					method: 'post',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-Frontend-Id': 6,
+						'X-Frontend-Version': '0',
+						'X-Request-With': 'https://www.nicovideo.jp',
+						'X-Access-Right-Key': this._domandInfo.accessRightKey,
+					},
+					credentials: 'include',
+					body: JSON.stringify(this._buildOutputsMatrix(videos, audioFormat))
+				}).then(res => res.json());
+				if (result.meta.status == null || result.meta.status >= 300) {
+					throw new Error('cannot create domand session', result)
+				}
+				this._lastResponse = result.data || {};
+				const {
+					contentUrl,
+					expireTime
+				} = this._lastResponse;
+				this._lastUpdate = Date.now();
+				this._expireTime = new Date(expireTime);
+				this.info = {
+					url: contentUrl,
+					video: {
+						format: videoFormat,
+						label: videoLabel,
+					},
+					audioFormat,
+					lastResponse: result
+				};
+				console.timeEnd('create Domand session');
+				return this.info;
+			}
+			async _deleteSession() {
+				if (this._isDeleted) {
+					return;
+				}
+				this._isDeleted = true;
+			}
+			get isDeleted() {
+				if (this._isDeleted) {
+					return true;
+				}
+				if (Date.now() > this._expireTime) {
+					this._isDeleted = true;
+				}
+				return this._isDeleted;
+			}
+			get serverType() {
+				return 'domand';
+			}
+			_buildOutputsMatrix(videoIds, audio) {
+				return {
+					outputs: videoIds.map(v => [v, audio]),
+				}
+			}
+		}
 		class DmcSession extends VideoSession {
 			constructor(params) {
 				super(params);
-				this._serverType = 'dmc';
 				this._heartBeatInterval = DMC_HEART_BEAT_INTERVAL_MS;
 				this._onHeartBeatSuccess = this._onHeartBeatSuccess.bind(this);
 				this._onHeartBeatFail = this._onHeartBeatFail.bind(this);
-				this._useHLS = typeof params.useHLS === 'boolean' ? params.useHLS : true;
 				this._lastUpdate = Date.now();
-				this._heartbeatLifeTime = this._heartbeatInterval;
+				this._heartbeatLifetime = this._heartBeatInterval;
+				this._dmcInfo = this._videoInfo.dmcInfo;
 			}
-			_createSession(videoInfo, dmcInfo) {
+			_createSession() {
+				const dmcInfo = this._dmcInfo;
 				console.time('create DMC session');
 				const baseUrl = (dmcInfo.urls.find(url => url.is_well_known_port === this._useWellKnownPort) || dmcInfo.urls[0]).url;
 				return new Promise((resolve, reject) => {
 					const url = `${baseUrl}?_format=json`;
-					this._heartbeatLifeTime = dmcInfo.heartbeatLifeTime;
+					this._heartbeatLifetime = dmcInfo.heartbeatLifetime;
 					const postData = new DmcPostData(dmcInfo, this._videoQuality, {
 						useHLS: this.useHLS,
 						useSSL: url.startsWith('https://'),
@@ -32768,23 +33282,25 @@ const VideoSessionWorker = (() => {
 					}).then(res => res.json())
 						.then(json => {
 							const data = json.data || {}, session = data.session || {};
-							let sessionId = session.id;
-							let content_src_id_sets = session.content_src_id_sets;
-							let videoFormat =
-								content_src_id_sets[0].content_src_ids[0].src_id_to_mux.video_src_ids[0];
-							let audioFormat =
-								content_src_id_sets[0].content_src_ids[0].src_id_to_mux.audio_src_ids[0];
+							const sessionId = session.id;
+							const content_src_id_sets = session.content_src_id_sets;
+							const {
+								video_src_ids: [videoFormat],
+								audio_src_ids: [audioFormat],
+							} = content_src_id_sets[0].content_src_ids[0].src_id_to_mux;
 							this._heartBeatUrl =
 								`${baseUrl}/${sessionId}?_format=json&_method=PUT`;
 							this._deleteSessionUrl =
 								`${baseUrl}/${sessionId}?_format=json&_method=DELETE`;
 							this._lastResponse = data;
 							this._lastUpdate = Date.now();
-							this._videoSessionInfo = {
-								type: 'dmc',
+							this.info = {
 								url: session.content_uri,
 								sessionId,
-								videoFormat,
+								video: {
+									format: videoFormat,
+									label: dmcInfo.availableVideos.find(v => videoFormat === v.id).metadata.label,
+								},
 								audioFormat,
 								heartBeatUrl: this._heartBeatUrl,
 								deleteSessionUrl: this._deleteSessionUrl,
@@ -32792,11 +33308,11 @@ const VideoSessionWorker = (() => {
 							};
 							this.enableHeartBeat();
 							console.timeEnd('create DMC session');
-							resolve(this._videoSessionInfo);
+							resolve(this.info);
 						}).catch(err => {
-						console.error('create api fail', err);
-						reject(err.message || err);
-					});
+							console.error('create api fail', err);
+							reject(err.message || err);
+						});
 				});
 			}
 			get useHLS() {
@@ -32804,7 +33320,7 @@ const VideoSessionWorker = (() => {
 					this._dmcInfo.protocols.includes('hls');
 			}
 			_heartBeat() {
-				let url = this._videoSessionInfo.heartBeatUrl;
+				let url = this.info.heartBeatUrl;
 				util.fetch(url, {
 					method: 'post',
 					dataType: 'text',
@@ -32819,7 +33335,7 @@ const VideoSessionWorker = (() => {
 					return Promise.resolve();
 				}
 				this._isDeleted = true;
-				let url = this._videoSessionInfo.deleteSessionUrl;
+				let url = this.info.deleteSessionUrl;
 				return new Promise(res => setTimeout(res, 3000)).then(() => {
 					return util.fetch(url, {
 						method: 'post',
@@ -32835,166 +33351,313 @@ const VideoSessionWorker = (() => {
 				this._lastUpdate = Date.now();
 			}
 			get isDeleted() {
-				return !!this._isDeleted || (Date.now() - this._lastUpdate) > this._heartbeatLifeTime * 1.2;
+				return !!this._isDeleted || (Date.now() - this._lastUpdate) > this._heartbeatLifetime * 1.2;
+			}
+			get serverType() {
+				return 'dmc';
 			}
 		}
-		class SmileSession extends VideoSession {
+		class StoryboardInfoLoader {
+			static create({type, ...params}) {
+				switch (type) {
+					case 'domand':
+						return new DomandStoryboardInfoLoader(params);
+					case 'dmc':
+						return new DmcStoryboardInfoLoader(params);
+					default:
+						throw new Error('Unknown server type');
+				}
+			}
+			constructor({url}) {
+				this._url = url;
+				this._duration = 1;
+			}
+			async load() {
+				throw new Error('not implemented');
+			}
+			get storyboard() {
+				return {
+					version: "1",
+					thumbnail: {
+						width: 160,
+						height: 90,
+					},
+					columns: 1,
+					rows: 1,
+					interval: 1000,
+					quality: 1,
+					images: [{
+						timestamp: 0,
+						url: 'https://example.com'
+					}],
+				};
+			}
+			get duration() {
+				return this._duration;
+			}
+			set duration(value) {
+				this._duration = value;
+			}
+			async getStoryboardWithImages() {
+				const fetchImages = this.storyboard.images.map(async image => {
+					try {
+						const res = await fetch(image.url);
+						return {
+							...image,
+							buffer: await res.arrayBuffer(),
+						}
+					} catch {
+						return image;
+					}
+				});
+				const count = Math.ceil(this.duration * 1000 / this.storyboard.interval);
+				return {
+					...this.storyboard,
+					count,
+					images: await Promise.all(fetchImages),
+				}
+			}
+			async _getInfo() {
+				return {
+					duration: this.duration,
+					storyboard: await this.getStoryboardWithImages(),
+				};
+			}
+			async getInfo() {
+				return {
+					...await this._getInfo(),
+					format: 'unknown',
+				};
+			}
+			_toJSON() {
+				return {
+					duration: this.duration,
+					storyboard: this.storyboard,
+				};
+			}
+			toJSON() {
+				return {
+					...this._toJSON(),
+					format: 'unknown',
+				};
+			}
+		}
+		class DomandStoryboardInfoLoader extends StoryboardInfoLoader {
 			constructor(params) {
 				super(params);
-				this._serverType = 'smile';
-				this._heartBeatInterval = SMILE_HEART_BEAT_INTERVAL_MS;
-				this._onHeartBeatSuccess = this._onHeartBeatSuccess.bind(this);
-				this._onHeartBeatFail = this._onHeartBeatFail.bind(this);
-				this._lastUpdate = Date.now();
+				this._rawData = null;
 			}
-			_createSession(videoInfo) {
-				this.enableHeartBeat();
-				return Promise.resolve(videoInfo.videoUrl);
-			}
-			_heartBeat() {
-				let url = this._videoInfo.watchUrl;
-				let query = [
-					'mode=pc_html5',
-					'playlist_token=' + this._videoInfo.playlistToken,
-					'continue_watching=1',
-					'watch_harmful=2'
-				];
-				if (this._videoInfo.isEconomy) {
-					query.push(this._videoInfo.isEconomy ? 'eco=1' : 'eco=0');
-				}
-				if (query.length > 0) {
-					url += '?' + query.join('&');
-				}
-				util.fetch(url, {
-					timeout: 10000,
-					credentials: 'include'
-				}).then(res => res.json())
-					.then(this._onHeartBeatSuccess)
-					.catch(this._onHeartBeatFail);
-			}
-			_deleteSession() {
-				if (this._isDeleted) {
-					return Promise.resolve();
-				}
-				this._isDeleted = true;
-				return Promise.resolve();
-			}
-			_onHeartBeatSuccess(result) {
-				this._lastResponse = result;
-				if (result.status !== 'ok') {
-					return this._onHeartBeatFail();
-				}
-				this._lastUpdate = Date.now();
-				if (result && result.flashvars && result.flashvars.watchAuthKey) {
-					this._videoInfo.watchAuthKey = result.flashvars.watchAuthKey;
+			async load() {
+				try {
+					const result = await util.fetch(this._url, {credentials: 'include'});
+					this._rawData = await result.json();
+				} catch {
+					throw 'storyboard request fail';
 				}
 			}
-			get isDeleted() {
-				return this._isDeleted || (Date.now() - this._lastUpdate > 10 * 60 * 1000);
+			get storyboard() {
+				if (this._rawData == null) {
+					return null;
+				}
+				const {
+					thumbnailWidth: width,
+					thumbnailHeight: height,
+					images,
+					...sbInfo
+				} = this._rawData;
+				return {
+					...sbInfo,
+					thumbnail: {
+						width,
+						height,
+					},
+					images: images.map(image => {
+						const url = new URL(this._url);
+						const name = image.url;
+						url.pathname = url.pathname.replace(/storyboard\.json$/, name);
+						image.url = url.toString();
+						return image;
+					}),
+				}
+			}
+			async getInfo() {
+				return {
+					...await this._getInfo(),
+					format: 'domand',
+				};
+			}
+			toJSON() {
+				return {
+					...this._toJSON(),
+					format: 'domand',
+				};
 			}
 		}
-		const DmcStoryboardInfoLoader = (() => {
-			const parseStoryboard = sb => {
-				const result = {
-					id: 0,
-					urls: [],
-					quality: sb.quality,
-					thumbnail: {
-						width: sb.thumbnail_width,
-						height: sb.thumbnail_height,
-						number: null,
-						interval: sb.interval
-					},
-					board: {
-						rows: sb.rows,
-						cols: sb.columns,
-						number: sb.images.length
-					}
-				};
-				sb.images.forEach(image => result.urls.push(image.uri));
-				return result;
-			};
-			const parseMeta = meta => {
-				const result = {
-					format: 'dmc',
-					status: meta.meta.message,
-					url: null,
-					movieId: null,
-					storyboard: []
-				};
-				meta.data.storyboards.forEach(sb => {
-					result.storyboard.unshift(parseStoryboard(sb));
-				});
-				result.storyboard.sort((a, b) => {
-					if (a.quality < b.quality) {
-						return 1;
-					}
-					if (a.quality > b.quality) {
-						return -1;
-					}
-					return 0;
-				});
-				return result;
-			};
-			const load = url => {
-				return util.fetch(url, {credentials: 'include'}).then(res => res.json())
-					.then(info => {
-						if (!info.meta || !info.meta.message || info.meta.message !== 'ok') {
-							return Promise.reject('storyboard request fail');
-						}
-						return parseMeta(info);
-					});
-			};
-			return {
-				load,
-				_parseMeta: parseMeta,
-				_parseStoryboard: parseStoryboard
-			};
-		})();
-		class StoryboardSession {
-			constructor(info) {
-				this._info = info;
-				this._url = info.urls[0].url;
+		class DmcStoryboardInfoLoader extends StoryboardInfoLoader {
+			constructor(params) {
+				super(params);
+				this._rawData = null;
 			}
-			create() {
-				const url = `${this._url}?_format=json`;
-				const body = this._createRequestString(this._info);
-				return util.fetch(url, {
-					method: 'POST',
-					credentials: 'include',
-					headers: {
-						'Content-Type': 'application/json'
-					},
-					body
-				}).then(res => res.json()).catch(err => {
-					console.error('create dmc session fail', err);
-					return Promise.reject('create dmc session fail');
-				});
-			}
-			_createRequestString(info) {
-				if (!info) {
-					info = this._info;
+			async load() {
+				const result = await util.fetch(this._url, {credentials: 'include'}).then(res => res.json());
+				if (result.meta.status && result.meta.status >= 300) {
+					throw 'storyboard request fail';
 				}
+				this._rawData = result.data;
+				return;
+			}
+			get _storyboards() {
+				const {storyboards = [], version = 0} = this._rawData ?? {};
+				const ver = version.toString();
+				return storyboards.map(sb => {
+					const images = sb.images.map(img => {
+						return {
+							timestamp: img.timestamp,
+							url: img.uri,
+						}
+					})
+					return {
+						version: ver,
+						thumbnail: {
+							width: sb.thumbnail_width,
+							height: sb.thumbnail_height,
+						},
+						columns: sb.columns,
+						rows: sb.rows,
+						interval: sb.interval,
+						quality: sb.quality,
+						images,
+					}
+				}).toSorted((a, b) => b.quality < a.quality);
+			}
+			get storyboard() {
+				if (this._storyboards.length > 0) {
+					return this._storyboards[0];
+				}
+				return null;
+			}
+			async getInfo() {
+				return {
+					...await this._getInfo(),
+					format: 'dmc',
+				};
+			}
+			toJSON() {
+				return {
+					...this._toJSON(),
+					format: 'dmc',
+				};
+			}
+		}
+		class StoryboardSession {
+			static create({serverType, ...params}) {
+				switch (serverType) {
+					case 'domand':
+						return new DomandStoryboardSession(params);
+					case 'dmc':
+						return new DmcStoryboardSession(params);
+					default:
+						throw new Error('Unknown server type');
+				}
+			}
+			constructor({videoInfo}) {
+				this._videoInfo = videoInfo;
+			}
+			async create() {
+				return await this._createSession();
+			}
+		}
+		class DomandStoryboardSession extends StoryboardSession {
+			constructor(params) {
+				super(params);
+				this._info = this._videoInfo.domandInfo;
+			}
+			async _createSession() {
+				const query = new URLSearchParams({ actionTrackId: this._videoInfo.actionTrackId });
+				const url = `https://nvapi.nicovideo.jp/v1/watch/${this._info.videoId}/access-rights/storyboard?${query.toString()}`;
+				try {
+					const result = await util.fetch(url, {
+						method: 'post',
+						headers: {
+							'Content-Type': 'application/json',
+							'X-Frontend-Id': 6,
+							'X-Frontend-Version': '0',
+							'X-Request-With': 'https://www.nicovideo.jp',
+							'X-Access-Right-Key': this._info.accessRightKey,
+						},
+						credentials: 'include',
+					}).then(res => res.json());
+					if (result.meta.status && result.meta.status >= 300) {
+						throw 'api_not_exist';
+					}
+					return this._toSessionInfo(result.data);
+				} catch (err) {
+					if (err === 'api_not_exist') {
+						throw 'Domand storyboard api not exist';
+					}
+					console.error('create domand session fail', err);
+					throw 'create domand session fail';
+				}
+			}
+			_toSessionInfo({contentUrl: url}) {
+				return {
+					type: 'domand',
+					url,
+				};
+			}
+		}
+		class DmcStoryboardSession extends StoryboardSession {
+			constructor(params) {
+				super(params);
+				this._info = this._videoInfo.dmcStoryboardInfo;
+				this._url = this._info.urls[0].url;
+			}
+			async _createSession() {
+				const url = `${this._url}?_format=json`;
+				const body = this._createRequestString();
+				try {
+					const result = await util.fetch(url, {
+						method: 'POST',
+						credentials: 'include',
+						headers: {
+							'Content-Type': 'application/json'
+						},
+						body
+					}).then(res => res.json());
+					if (result.meta.status && result.meta.status >= 300 || !result.data?.session?.content_uri) {
+						throw 'api_not_exist';
+					}
+					return this._toSessionInfo(result.data);
+				} catch (err) {
+					if (err === 'api_not_exist') {
+						throw 'DMC storyboard api not exist';
+					}
+					console.error('create dmc session fail', err);
+					throw 'create dmc session fail';
+				}
+			}
+			_createRequestString() {
+				const info = this._info;
 				const request = {
 					session: {
 						client_info: {
-							player_id: info.player_id
+							player_id: info.playerId
 						},
 						content_auth: {
-							auth_type: info.auth_types.storyboard,
-							content_key_timeout: info.content_key_timeout,
+							auth_type: info.authTypes.storyboard,
+							content_key_timeout: info.contentKeyTimeout,
 							service_id: 'nicovideo',
-							service_user_id: info.service_user_id
+							service_user_id: info.serviceUserId,
 						},
-						content_id: info.content_id,
+						content_id: info.contentId,
 						content_src_id_sets: [{
-							content_src_ids: []
+							content_src_ids: info.videos
 						}],
 						content_type: 'video',
 						content_uri: '',
 						keep_method: {
 							heartbeat: {
-								lifetime: info.heartbeat_lifetime
+								lifetime: info.heartbeatLifetime
 							}
 						},
 						priority: info.priority,
@@ -33004,14 +33667,14 @@ const VideoSessionWorker = (() => {
 								http_parameters: {
 									parameters: {
 										storyboard_download_parameters: {
-											use_well_known_port: info.urls[0].is_well_known_port ? 'yes' : 'no',
-											use_ssl: info.urls[0].is_ssl ? 'yes' : 'no'
+											use_well_known_port: 'yes',
+											use_ssl: 'yes'
 										}
 									}
 								}
 							}
 						},
-						recipe_id: info.recipe_id,
+						recipe_id: info.recipeId,
 						session_operation_auth: {
 							session_operation_auth_by_signature: {
 								signature: info.signature,
@@ -33021,25 +33684,29 @@ const VideoSessionWorker = (() => {
 						timing_constraint: 'unlimited'
 					}
 				};
-				(info.videos || []).forEach(video => {
-					request.session.content_src_id_sets[0].content_src_ids.push(video);
-				});
 				return JSON.stringify(request);
+			}
+			_toSessionInfo({session: {content_uri: url}}) {
+				return {
+					type: 'dmc',
+					url,
+				};
 			}
 		}
 		const SESSION_ID = Symbol('SESSION_ID');
 		const getSessionId = function() { return `session_${this.id++}`; }.bind({id: 0});
 		let current = null;
-		const create = async ({videoInfo, dmcInfo, videoQuality, serverType, useHLS}) => {
+		const create = async (params) => {
 			if (current) {
 				current.close();
 				current = null;
 			}
-			current = await VideoSession.create({
-				videoInfo, dmcInfo, videoQuality, serverType, useHLS});
+			current = await VideoSession.create(params);
 			const sessionId = getSessionId();
 			current[SESSION_ID] = sessionId;
 			return {
+				serverType: current.serverType,
+				isDomand: current.isDomand,
 				isDmc: current.isDmc,
 				sessionId
 			};
@@ -33052,6 +33719,8 @@ const VideoSessionWorker = (() => {
 				return {};
 			}
 			return {
+				serverType: current.serverType,
+				isDomand: current.isDomand,
 				isDmc: current.isDmc,
 				isDeleted: current.isDeleted,
 				isAbnormallyClosed: current.isAbnormallyClosed,
@@ -33062,22 +33731,24 @@ const VideoSessionWorker = (() => {
 			current && current.close();
 			current = null;
 		};
-		const storyboard = async ({info, duration}) => {
-			const result = await new StoryboardSession(info).create();
-			if (!result || !result.data || !result.data.session || !result.data.session.content_uri) {
-				return Promise.reject('DMC storyboard api not exist');
+		const storyboard = async ({videoInfo, serverType}) => {
+			const sbSessionInfo = await StoryboardSession.create({videoInfo, serverType}).create();
+			const loader = StoryboardInfoLoader.create(sbSessionInfo);
+			loader.duration = videoInfo.duration;
+			await loader.load();
+			try {
+				const sbInfo = await loader.getInfo();
+				return {
+					...sbInfo,
+					status: 'ok',
+					watchId: videoInfo.watchId,
+				};
+			} catch {
+				return {
+					watchId: videoInfo.watchId,
+					status: 'fail',
+				}
 			}
-			const uri = result.data.session.content_uri;
-			const sbInfo = await DmcStoryboardInfoLoader.load(uri);
-			for (let board of sbInfo.storyboard) {
-				board.thumbnail.number = Math.floor(duration * 1000 / board.thumbnail.interval);
-				board.urls = await Promise.all(
-					board.urls.map(url => fetch(url).then(r => r.arrayBuffer()).catch(() => url)
-				));
-				break; // 二番目以降は低画質
-			}
-			sbInfo.duration = duration;
-			return sbInfo;
 		};
 		self.onmessage = async ({command, params}) => {
 			switch (command) {
@@ -33102,8 +33773,7 @@ const VideoSessionWorker = (() => {
 	const create = async ({videoInfo, videoQuality, serverType, useHLS}) => {
 		await initWorker();
 		const params = {
-			videoInfo: videoInfo.getData(),
-			dmcInfo: videoInfo.dmcInfo ? videoInfo.dmcInfo.getData() : null,
+			videoInfo: videoInfo.toJSON(),
 			videoQuality,
 			serverType,
 			useHLS
@@ -33116,17 +33786,18 @@ const VideoSessionWorker = (() => {
 			close: () => worker.post({command: 'close', params: {sessionId}})
 		});
 	};
-	const storyboard = async (watchId, sbSessionInfo, duration) => {
-		const cache = await StoryboardCacheDb.get(watchId);
+	const storyboard = async ({type, info}) => {
+		const videoInfo = info.toJSON();
+		const cacheId = `${videoInfo.watchId}_${type}`;
+		const cache = await StoryboardCacheDb.get(cacheId);
 		if (cache) {
 			return cache;
 		}
-		worker = worker || workerUtil.createCrossMessageWorker(func);
-		const params = {info: sbSessionInfo, duration};
-		const sbInfo = await worker.post({command: 'storyboard', params});
-		sbInfo.watchId = watchId;
-		StoryboardCacheDb.put(watchId, sbInfo);
-		return sbInfo;
+		await initWorker();
+		const params = {videoInfo, serverType: type};
+		const result = await worker.post({command: 'storyboard', params});
+		StoryboardCacheDb.put(cacheId, result);
+		return result;
 	};
 	return {initWorker, create, storyboard};
 })();
